@@ -41,7 +41,7 @@ typedef signed int fix15 ;
 
 //Direct Digital Synthesis (DDS) parameters
 #define two32 4294967296.0  // 2^32 (a constant)
-#define Fs 400000            // sample rate
+#define Fs 200000            // sample rate
 
 // the DDS units - core 1
 // Phase accumulator and phase increment. Increment sets output frequency.
@@ -62,8 +62,8 @@ int DAC_output_0 ;
 int DAC_output_1 ;
 
 // Amplitude modulation parameters and variables
-fix15 global_max_amplitude = int2fix15(1) ;
-fix15 max_amplitude = float2fix15(1) ;    // maximum amplitude
+fix15 global_max_amplitude = float2fix15(1.0) ;
+fix15 max_amplitude = float2fix15(1.0) ;    // maximum amplitude
 fix15 attack_inc ;                          // rate at which sound ramps up
 fix15 decay_inc ;                           // rate at which sound ramps down
 fix15 current_amplitude_0 = 0 ;             // current amplitude (modified in ISR)
@@ -73,14 +73,13 @@ fix15 current_amplitude_1 = 0 ;             // current amplitude (modified in IS
 #define ATTACK_TIME             200
 #define DECAY_TIME              200
 #define SUSTAIN_TIME            10000
-#define BEEP_DURATION           6800
-#define BEEP_REPEAT_INTERVAL    8000
-#define CHIRP_REPEAT_INTERVAL   10400
+#define BEEP_DURATION           3000
+#define BEEP_REPEAT_INTERVAL    40000
 
 // State machine variables
 volatile unsigned int STATE_0 = 0 ;
 volatile unsigned int count_0 = 0 ;
-volatile unsigned int STATE_1 = 0 ;
+volatile unsigned int STATE_1 = 2 ;
 volatile unsigned int count_1 = 0 ;
 volatile unsigned int syl_num_0 = 0 ;
 volatile unsigned int syl_num_1 = 0 ;
@@ -122,8 +121,16 @@ struct pt_sem core_1_go, core_0_go ;
 #define speed_sound 34000.0   // c
 int angle_deg;              // user input
 fix15 angle_rad; 
-fix15 ITD = float2fix15(0.00039507); // only for 45 deg : timing delay (seconds)
-fix15 ILD = float2fix15(0.7071);     // level delay 
+int left_0 = 0;
+int left_1 = 0;
+// fix15 ITD = float2fix15(0.00039507 * 40000); // only for 45 deg : timing delay (seconds)
+// fix15 ILD = float2fix15(0.7071);     // level delay - 45 deg
+// int ITD = 16; //- 45 deg
+// int ITD = 20; // 60 deg
+// fix15 ILD = float2fix15(0.5);     // level delay - 60 deg
+
+fix15 ILD = float2fix15(0.7);     // level delay - 45 deg
+int ITD = 16; // 45 deg
 
 fix15 max_amplitude_right ;
 fix15 attack_inc_right ;
@@ -150,33 +157,34 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
             sin_table[phase_accum_main_1>>24])) + 2048 ;
         
         // intensity decay tuning -- customized for each audio source
-        intensity_diff = (10 * log(sqrt((x_dist*x_dist)+(y_dist*y_dist))/6) / log(10)) - 2;
-        max_amplitude = global_max_amplitude - float2fix15(intensity_diff);
+        // intensity_diff = (10 * log(sqrt((x_dist*x_dist)+(y_dist*y_dist))/6) / log(10)) - 2;
+        // max_amplitude = global_max_amplitude - float2fix15(intensity_diff);
 
-        if (max_amplitude < 0) max_amplitude = int2fix15(0);
-        else if (max_amplitude > 12) max_amplitude = int2fix15(12);
+        // if (max_amplitude < 0) max_amplitude = int2fix15(0);
+        // else if (max_amplitude > global_max_amplitude) max_amplitude = global_max_amplitude;
 
-        max_amplitude_left = multfix15( max_amplitude , ILD);
-        attack_inc_left = divfix(max_amplitude_left, attack_inc_left);
-        decay_inc_left = divfix(max_amplitude_left, decay_inc_left);
+        // max_amplitude_left = multfix15( max_amplitude , ILD);
 
-        // Ramp up amplitude
-        if (count_0 < ATTACK_TIME) {
-            current_amplitude_0 = (current_amplitude_0 + attack_inc_left) ;
+        if(left_1 == 1) {
+            // Ramp up amplitude
+            if (count_1 < ATTACK_TIME) {
+                current_amplitude_1 = (current_amplitude_1 + attack_inc_left) ;
+            }
+            // Ramp down amplitude
+            else if (count_1 > BEEP_DURATION - DECAY_TIME) {
+                current_amplitude_1 = (current_amplitude_1 - decay_inc_left) ;
+            }
         }
-        // Ramp down amplitude
-        else if (count_0 > BEEP_DURATION - DECAY_TIME) {
-            current_amplitude_0 = (current_amplitude_0 - decay_inc_left) ;
+        else {
+            // Ramp up amplitude
+            if (count_1 < ATTACK_TIME) {
+                current_amplitude_1 = (current_amplitude_1 + attack_inc) ;
+            }
+            // Ramp down amplitude
+            else if (count_1 > BEEP_DURATION - DECAY_TIME) {
+                current_amplitude_1 = (current_amplitude_1 - decay_inc) ;
+            }
         }
-
-        // // Ramp up amplitude
-        // if (count_1 < ATTACK_TIME) {
-        //     current_amplitude_1 = (current_amplitude_1 + attack_inc) ;
-        // }
-        // // Ramp down amplitude
-        // else if (count_1 > BEEP_DURATION - DECAY_TIME) {
-        //     current_amplitude_1 = (current_amplitude_1 - decay_inc) ;
-        // }
 
         // Mask with DAC control bits
         DAC_data_1 = (DAC_config_chan_A | (DAC_output_1 & 0xffff))  ;
@@ -196,13 +204,33 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
     else if(STATE_1 == 1) {
         count_1 += 1 ;
         if (count_1 == BEEP_REPEAT_INTERVAL) {
+            count_1 = 0 ;
+            current_amplitude_1 = 0 ;
+
+            if(left_1 == 1){
+                STATE_1 = 2 ;           
+            }else{
+                STATE_1 = 0 ;
+                left_1 = 1;
+            }
+        }
+    }else if(STATE_1 == 2){
+        count_1 += 1 ;
+        if (count_1 == ITD && left_1==1) {
+            count_1 = 0 ;
+            current_amplitude_1 = 0 ;
+            left_1 = 0;
+        }
+        else if (count_1 == ITD && left_1==0) {
+            count_1 = 0 ;
             current_amplitude_1 = 0 ;
             STATE_1 = 0 ;
-            count_1 = 0 ;
         }
     }
     // retrieve core number of execution
     corenum_1 = get_core_num() ;
+
+    
 
     return true;
     
@@ -218,25 +246,25 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
         DAC_output_0 = fix2int15(multfix15(current_amplitude_0,
             sin_table[phase_accum_main_0>>24])) + 2048 ;
 
-        // max_amplitude_right = multfix15( max_amplitude , ILD);
-        // attack_inc_right = divfix(max_amplitude_right, attack_inc_right);
-        // decay_inc_right = divfix(max_amplitude_right, decay_inc_right);
-
-        // // Ramp up amplitude
-        // if (count_0 < ATTACK_TIME) {
-        //     current_amplitude_0 = (current_amplitude_0 + attack_inc_right) ;
-        // }
-        // // Ramp down amplitude
-        // else if (count_0 > BEEP_DURATION - DECAY_TIME) {
-        //     current_amplitude_0 = (current_amplitude_0 - decay_inc_right) ;
-        // }
-        // Ramp up amplitude
-        if (count_0 < ATTACK_TIME) {
-            current_amplitude_0 = (current_amplitude_0 + attack_inc) ;
+        if(left_0 == 0){
+            // Ramp up amplitude
+            if (count_0 < ATTACK_TIME) {
+                current_amplitude_0 = (current_amplitude_0 + attack_inc_right) ;
+            }
+            // Ramp down amplitude
+            else if (count_0 > BEEP_DURATION - DECAY_TIME) {
+                current_amplitude_0 = (current_amplitude_0 - decay_inc_right) ;
+            }
         }
-        // Ramp down amplitude
-        else if (count_0 > BEEP_DURATION - DECAY_TIME) {
-            current_amplitude_0 = (current_amplitude_0 - decay_inc) ;
+        else {
+            // Ramp up amplitude
+            if (count_0 < ATTACK_TIME) {
+                current_amplitude_0 = (current_amplitude_0 + attack_inc) ;
+            }
+            // Ramp down amplitude
+            else if (count_0 > BEEP_DURATION - DECAY_TIME) {
+                current_amplitude_0 = (current_amplitude_0 - decay_inc) ;
+            }
         }
 
         // Mask with DAC control bits
@@ -257,9 +285,27 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
     else if(STATE_0 == 1) {
         count_0 += 1 ;
         if (count_0 == BEEP_REPEAT_INTERVAL) {
+            count_0 = 0 ;
+            current_amplitude_0 = 0 ;
+
+            if(left_0 == 0){
+                STATE_0 = 2 ;           
+            }else{
+                STATE_0 = 0 ;
+                left_0 = 0;
+            }
+        }
+    }else if(STATE_0 == 2){
+        count_0 += 1 ;
+        if (count_0 == ITD && left_0==0) {
+            count_0 = 0 ;
+            current_amplitude_0 = 0 ;
+            left_0 = 1;
+        }
+        else if (count_0 == ITD && left_0==1) {
+            count_0 = 0 ;
             current_amplitude_0 = 0 ;
             STATE_0 = 0 ;
-            count_0 = 0 ;
         }
     }
     // retrieve core number of execution
@@ -268,6 +314,8 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
     //     delay_counter = 0;
         
     // }
+    
+
     return true;
     
 }
@@ -380,6 +428,14 @@ int main() {
     attack_inc = divfix(max_amplitude, int2fix15(ATTACK_TIME)) ;
     decay_inc =  divfix(max_amplitude, int2fix15(DECAY_TIME)) ;
 
+    max_amplitude_left = multfix15( max_amplitude , ILD);
+    attack_inc_left = divfix(max_amplitude_left, int2fix15(ATTACK_TIME));
+    decay_inc_left = divfix(max_amplitude_left, int2fix15(DECAY_TIME));
+
+    max_amplitude_right = multfix15( max_amplitude , ILD);
+    attack_inc_right = divfix(max_amplitude_right, int2fix15(ATTACK_TIME));
+    decay_inc_right = divfix(max_amplitude_right, int2fix15(DECAY_TIME));
+
     // Build the sine lookup table
     // scaled to produce values between 0 and 4096 (for 12-bit DAC)
     int ii;
@@ -392,13 +448,14 @@ int main() {
     PT_SEM_SAFE_INIT(&core_1_go, 0) ;
 
     // Desynchronize the beeps
-    sleep_ms(fix2int15(ITD)*1000) ;
+    // sleep_ms(fix2int15(ITD)*1000) ;
     // Launch core 1
 
     multicore_launch_core1(core1_entry);
 
     // Create a repeating timer that calls 
     // repeating_timer_callback (defaults core 0)
+
     struct repeating_timer timer_core_0;
 
     // Negative delay so means we will call repeating_timer_callback, and call it
