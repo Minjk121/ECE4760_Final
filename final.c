@@ -211,7 +211,7 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
                 STATE_1 = 2 ;           
             }else{
                 STATE_1 = 0 ;
-                left_1 = 1;
+                // left_1 = 1;
             }
         }
     }else if(STATE_1 == 2){
@@ -219,7 +219,7 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
         if (count_1 == ITD && left_1==1) {
             count_1 = 0 ;
             current_amplitude_1 = 0 ;
-            left_1 = 0;
+            // left_1 = 0;
         }
         else if (count_1 == ITD && left_1==0) {
             count_1 = 0 ;
@@ -292,7 +292,7 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
                 STATE_0 = 2 ;           
             }else{
                 STATE_0 = 0 ;
-                left_0 = 0;
+                // left_0 = 0;
             }
         }
     }else if(STATE_0 == 2){
@@ -300,7 +300,7 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
         if (count_0 == ITD && left_0==0) {
             count_0 = 0 ;
             current_amplitude_0 = 0 ;
-            left_0 = 1;
+            // left_0 = 1;
         }
         else if (count_0 == ITD && left_0==1) {
             count_0 = 0 ;
@@ -368,6 +368,24 @@ static PT_THREAD (protothread_core_0(struct pt *pt))
     PT_END(pt) ;
 }
 
+// User input thread. User can change draw speed
+static PT_THREAD (protothread_serial(struct pt *pt))
+{
+    PT_BEGIN(pt) ;
+    static char classifier ;
+    static int test_in ;
+    static float float_in ;
+    while(1) {
+
+        sprintf(pt_serial_out_buffer, "input desired side (left = 0, right = 1) : ");
+        serial_write ;
+        serial_read ;
+        sscanf(pt_serial_in_buffer,"%d", &test_in) ;
+        left_0 = test_in ;
+        left_1 = test_in ;
+    }
+    PT_END(pt) ;
+}
 
 // This is the core 1 entry point - LEFT ear
 void core1_entry() {
@@ -465,7 +483,8 @@ int main() {
 
     // Add core 0 threads
     pt_add_thread(protothread_core_0) ;
-
+    // add user interface
+    pt_add_thread(protothread_serial) ;
     // Start scheduling core 0 threads
     pt_schedule_start ;
 
