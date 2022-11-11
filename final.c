@@ -121,8 +121,8 @@ struct pt_sem core_1_go, core_0_go ;
 #define speed_sound 34000.0   // c
 int angle_deg;              // user input
 fix15 angle_rad; 
-int left_0 = 0;
-int left_1 = 0;
+int direction_0 = 0;
+int direction_1 = 0;
 // fix15 ITD = float2fix15(0.00039507 * 40000); // only for 45 deg : timing delay (seconds)
 // fix15 ILD = float2fix15(0.7071);     // level delay - 45 deg
 // int ITD = 16; //- 45 deg
@@ -165,7 +165,24 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
 
         // max_amplitude_left = multfix15( max_amplitude , ILD);
 
-        if(left_1 == 1) {
+        if (direction_1==0 || direction_1==4): {
+            ILD = 0.1736 ;
+            ITD = 25 ;
+        }
+        else if (direction_1==1 || direction_1==3): {
+            ILD = 0.7 ;
+            ITD = 16 ;
+        }
+        else if (direction_1==2): {
+            ILD = 1 ;
+            ITD = 0 ;
+        }
+
+        max_amplitude_left = multfix15( max_amplitude , ILD);
+        attack_inc_left = divfix(max_amplitude_left, int2fix15(ATTACK_TIME));
+        decay_inc_left = divfix(max_amplitude_left, int2fix15(DECAY_TIME));
+
+        if(direction_1==1 || direction_1==0) {
             // Ramp up amplitude
             if (count_1 < ATTACK_TIME) {
                 current_amplitude_1 = (current_amplitude_1 + attack_inc_left) ;
@@ -207,25 +224,20 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
             count_1 = 0 ;
             current_amplitude_1 = 0 ;
 
-            if(left_1 == 1){
+            // PROBLEM AREA: check logic for entering state 2
+
+            if(direction_1==1 || direction_1==0){
                 STATE_1 = 2 ;           
             }else{
                 STATE_1 = 0 ;
-                // left_1 = 1;
             }
         }
     }else if(STATE_1 == 2){
         count_1 += 1 ;
-        if (count_1 == ITD && left_1==1) {
+        if (count_1 == ITD) {
             count_1 = 0 ;
             current_amplitude_1 = 0 ;
-            STATE_1 = 0 ;           // comment out for ping pong
-            // left_1 = 0;          // ping pong
-        }
-        else if (count_1 == ITD && left_1==0) {
-            count_1 = 0 ;
-            current_amplitude_1 = 0 ;
-            STATE_1 = 0 ;
+            STATE_1 = 0 ;           
         }
     }
     // retrieve core number of execution
@@ -246,8 +258,26 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
         phase_accum_main_0 += phase_incr_main_0  ;
         DAC_output_0 = fix2int15(multfix15(current_amplitude_0,
             sin_table[phase_accum_main_0>>24])) + 2048 ;
+        
+        if (direction_0==0 || direction_0==4): {
+            ILD = 0.1736 ;
+            ITD = 25 ;
+        }
+        else if (direction_0==1 || direction_0==3): {
+            ILD = 0.7 ;
+            ITD = 16 ;
+        }
+        else if (direction_0==2): {
+            ILD = 1 ;
+            ITD = 0 ;
+        }
 
-        if(left_0 == 0){
+
+        max_amplitude_right = multfix15( max_amplitude , ILD);
+        attack_inc_right = divfix(max_amplitude_right, int2fix15(ATTACK_TIME));
+        decay_inc_right = divfix(max_amplitude_right, int2fix15(DECAY_TIME));
+
+        if(direction_0==3 || direction_0==4){
             // Ramp up amplitude
             if (count_0 < ATTACK_TIME) {
                 current_amplitude_0 = (current_amplitude_0 + attack_inc_right) ;
@@ -289,25 +319,18 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
             count_0 = 0 ;
             current_amplitude_0 = 0 ;
 
-            if(left_0 == 0){
+            if(direction_0==3 || direction_0==4){
                 STATE_0 = 2 ;           
             }else{
                 STATE_0 = 0 ;
-                // left_0 = 0;
             }
         }
     }else if(STATE_0 == 2){
         count_0 += 1 ;
-        if (count_0 == ITD && left_0==0) {
+        if (count_0 == ITD) {
             count_0 = 0 ;
             current_amplitude_0 = 0 ;
-            STATE_0 = 0 ;       // comment out for ping pong
-            // left_0 = 1;      // ping pong
-        }
-        else if (count_0 == ITD && left_0==1) {
-            count_0 = 0 ;
-            current_amplitude_0 = 0 ;
-            STATE_0 = 0 ;
+            STATE_0 = 0 ;      
         }
     }
     // retrieve core number of execution
@@ -379,12 +402,12 @@ static PT_THREAD (protothread_serial(struct pt *pt))
     static float float_in ;
     while(1) {
 
-        sprintf(pt_serial_out_buffer, "input desired side (left = 0, right = 1) : ");
+        sprintf(pt_serial_out_buffer, "input desired direction (0-5) : ");
         serial_write ;
         serial_read ;
         sscanf(pt_serial_in_buffer,"%d", &test_in) ;
-        left_0 = test_in ;
-        left_1 = test_in ;
+        direction_0 = test_in ;
+        direction_1 = test_in ;
     }
     PT_END(pt) ;
 }
@@ -447,14 +470,6 @@ int main() {
     // set up increments for calculating bow envelope
     attack_inc = divfix(max_amplitude, int2fix15(ATTACK_TIME)) ;
     decay_inc =  divfix(max_amplitude, int2fix15(DECAY_TIME)) ;
-
-    max_amplitude_left = multfix15( max_amplitude , ILD);
-    attack_inc_left = divfix(max_amplitude_left, int2fix15(ATTACK_TIME));
-    decay_inc_left = divfix(max_amplitude_left, int2fix15(DECAY_TIME));
-
-    max_amplitude_right = multfix15( max_amplitude , ILD);
-    attack_inc_right = divfix(max_amplitude_right, int2fix15(ATTACK_TIME));
-    decay_inc_right = divfix(max_amplitude_right, int2fix15(DECAY_TIME));
 
     // Build the sine lookup table
     // scaled to produce values between 0 and 4096 (for 12-bit DAC)
