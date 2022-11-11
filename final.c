@@ -219,7 +219,8 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
         if (count_1 == ITD && left_1==1) {
             count_1 = 0 ;
             current_amplitude_1 = 0 ;
-            // left_1 = 0;
+            STATE_1 = 0 ;           // comment out for ping pong
+            // left_1 = 0;          // ping pong
         }
         else if (count_1 == ITD && left_1==0) {
             count_1 = 0 ;
@@ -300,7 +301,8 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
         if (count_0 == ITD && left_0==0) {
             count_0 = 0 ;
             current_amplitude_0 = 0 ;
-            // left_0 = 1;
+            STATE_0 = 0 ;       // comment out for ping pong
+            // left_0 = 1;      // ping pong
         }
         else if (count_0 == ITD && left_0==1) {
             count_0 = 0 ;
@@ -334,9 +336,9 @@ static PT_THREAD (protothread_core_1(struct pt *pt))
         for (int i=0; i<10; i++) {
             global_counter += 1 ;
             sleep_ms(250) ;
-            printf("Core 1: %d, ISR core: %d\n", global_counter, corenum_1) ;
+            // printf("Core 1: %d, ISR core: %d\n", global_counter, corenum_1) ;
         }
-        printf("\n\n") ;
+        // printf("\n\n") ;
         // signal other core
         PT_SEM_SAFE_SIGNAL(pt, &core_0_go) ;
     }
@@ -358,9 +360,9 @@ static PT_THREAD (protothread_core_0(struct pt *pt))
         for (int i=0; i<10; i++) {
             global_counter += 1 ;
             sleep_ms(250) ;
-            printf("Core 0: %d, ISR core: %d\n", global_counter, corenum_0) ;
+            // printf("Core 0: %d, ISR core: %d\n", global_counter, corenum_0) ;
         }
-        printf("\n\n") ;
+        // printf("\n\n") ;
         // signal other core
         PT_SEM_SAFE_SIGNAL(pt, &core_1_go) ;
     }
