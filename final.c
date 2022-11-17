@@ -427,8 +427,8 @@ static PT_THREAD (protothread_core_0(struct pt *pt))
         // signal other core
         PT_SEM_SAFE_SIGNAL(pt, &core_1_go) ;
 
-        printf("old directions: %d, %d\n", old_direction_0, old_direction_1);
-        printf("state : %d, %d\n", STATE_0, STATE_1);
+        // printf("old directions: %d, %d\n", old_direction_0, old_direction_1);
+        // printf("state : %d, %d\n", STATE_0, STATE_1);
     }
     // Indicate thread end
     PT_END(pt) ;
@@ -465,6 +465,52 @@ static PT_THREAD (protothread_serial(struct pt *pt))
         //     STATE_0=2;
         //     STATE_1=0;
         // }
+    }
+    PT_END(pt) ;
+}
+
+// User joystick. User can change direction of sound
+static PT_THREAD (protothread_joystick(struct pt *pt))
+{
+    PT_BEGIN(pt) ;
+
+    while(1) {
+        adc_select_input(0);
+        uint adc_x_raw = adc_read();
+        adc_select_input(1);
+        uint adc_y_raw = adc_read();
+
+        if (adc_y_raw > 2000){
+            if(adc_x_raw <1700) { // front left
+                printf("3 section\n");
+                direction_0=3 ;
+                direction_1=3 ;
+            }
+            else if(adc_x_raw >3000){ // front right
+                printf("1 section\n");
+                direction_0=1 ;
+                direction_1=1 ;
+            }
+            else {
+                printf("2 section\n"); // front
+                direction_0=2 ;
+                direction_1=2 ;
+            }
+        }
+        // back
+        else {
+            if(adc_x_raw <2000) { // back left
+                printf("4 section\n");
+                direction_0=4 ;
+                direction_1=4 ;
+            }
+            else if(adc_x_raw >=2000){ // back right
+                printf("0 section\n");
+                direction_0=0 ;
+                direction_1=0 ;
+            }
+        }
+        
     }
     PT_END(pt) ;
 }
@@ -524,39 +570,12 @@ int main() {
     gpio_init(CORE_0) ;
     gpio_init(CORE_1) ;
 
-    ///////////////////////////////////////////////////////////////////////////////
-    // ============================== ADC CONFIGURATION ==========================
-    //////////////////////////////////////////////////////////////////////////////
-    // Init GPIO for analogue use: hi-Z, no pulls, disable digital input buffer.
-    // adc_gpio_init(ADC_PIN_26);
-    // adc_gpio_init(ADC_PIN_27);
-
-
-    // // Initialize the ADC harware
-    // // (resets it, enables the clock, spins until the hardware is ready)
-    // adc_init() ;
-
-    // // Select analog mux input (0...3 are GPIO 26, 27, 28, 29; 4 is temp sensor)
-    // adc_select_input(ADC_CHAN_0) ;
-
-    // // Setup the FIFO
-    // adc_fifo_setup(
-    //     true,    // Write each completed conversion to the sample FIFO
-    //     true,    // Enable DMA data request (DREQ)
-    //     1,       // DREQ (and IRQ) asserted when at least 1 sample present
-    //     false,   // We won't see the ERR bit because of 8 bit reads; disable.
-    //     true     // Shift each sample to 8 bits when pushing to FIFO
-    // );
-
-    // // Divisor of 0 -> full speed. Free-running capture with the divider is
-    // // equivalent to pressing the ADC_CS_START_ONCE button once per `div + 1`
-    // // cycles (div not necessarily an integer). Each conversion takes 96
-    // // cycles, so in general you want a divider of 0 (hold down the button
-    // // continuously) or > 95 (take samples less frequently than 96 cycle
-    // // intervals). This is all timed by the 48 MHz ADC clock. This is setup
-    // // to grab a sample at 10kHz (48Mhz/10kHz - 1)
-    // adc_set_clkdiv(ADCCLK/Fs);
-
+    // ADC INIT FOR JOYSTICK
+    stdio_init_all();
+    adc_init();
+    // Make sure GPIO is high-impedance, no pullups etc
+    adc_gpio_init(26);
+    adc_gpio_init(27);
 
     // set up increments for calculating bow envelope
     attack_inc = divfix(max_amplitude, int2fix15(ATTACK_TIME)) ;
@@ -592,7 +611,9 @@ int main() {
     // Add core 0 threads
     pt_add_thread(protothread_core_0) ;
     // add user interface
-    pt_add_thread(protothread_serial) ;
+    // pt_add_thread(protothread_serial) ;
+    // add joystick interface
+    pt_add_thread(protothread_joystick) ;
     // Start scheduling core 0 threads
     pt_schedule_start ;
 
