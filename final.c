@@ -25,6 +25,8 @@
 #include "pico/multicore.h"
 #include "hardware/sync.h"
 #include "hardware/spi.h"
+#include "hardware/adc.h"
+
 // Include protothreads
 #include "pt_cornell_rp2040_v1.h"
 
@@ -123,6 +125,8 @@ int angle_deg;              // user input
 fix15 angle_rad; 
 int direction_0 = 0;
 int direction_1 = 0;
+volatile int old_direction_0 = 0;
+volatile int old_direction_1 = 0;
 // fix15 ITD = float2fix15(0.00039507 * 40000); // only for 45 deg : timing delay (seconds)
 // fix15 ILD = float2fix15(0.7071);     // level delay - 45 deg
 // int ITD = 16; //- 45 deg
@@ -147,9 +151,28 @@ float intensity_diff;
 
 volatile int delay_counter ;
 
+// ADC Channel and pin
+#define ADC_CHAN_0 0
+#define ADC_CHAN_1 1
+#define ADC_PIN_26 26
+#define ADC_PIN_27 27
+
+
 // This timer ISR is called on core 1 - LEFT
 bool repeating_timer_callback_core_1(struct repeating_timer *t) {
-
+    if (direction_1 != old_direction_1) {
+        old_direction_1 = direction_1;
+        if (direction_1==2) {
+            STATE_1=0;
+        }
+        else if (direction_1==0 || direction_1==1) {
+            STATE_1=2;
+        }
+        else if (direction_1==3 || direction_1==4) {
+            STATE_1=0;
+        }
+    }
+        
     if (STATE_1 == 0) {
         // DDS phase and sine table lookup
         phase_accum_main_1 += phase_incr_main_1  ;
@@ -165,18 +188,20 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
 
         // max_amplitude_left = multfix15( max_amplitude , ILD);
 
-        if (direction_1==0 || direction_1==4): {
+        if (direction_1==0 || direction_1==4){
             ILD = 0.1736 ;
             ITD = 25 ;
         }
-        else if (direction_1==1 || direction_1==3): {
+        else if (direction_1==1 || direction_1==3){
             ILD = 0.7 ;
             ITD = 16 ;
         }
-        else if (direction_1==2): {
+        else if (direction_1==2){
             ILD = 1 ;
             ITD = 0 ;
         }
+
+
 
         max_amplitude_left = multfix15( max_amplitude , ILD);
         attack_inc_left = divfix(max_amplitude_left, int2fix15(ATTACK_TIME));
@@ -251,7 +276,20 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
 
 // This timer ISR is called on core 0 - RIGHT
 bool repeating_timer_callback_core_0(struct repeating_timer *t) {
-    delay_counter++;
+    // delay_counter++;
+
+    if (direction_0 != old_direction_0) {
+        old_direction_0 = direction_0;
+        if (direction_0==2) {
+            STATE_0=0;
+        }
+        else if (direction_0==0 || direction_0==1) {
+            STATE_0=0;
+        }
+        else if (direction_0==3 || direction_0==4) {
+            STATE_0=2;
+        }
+    }
     if (STATE_0 == 0) {
 
         // DDS phase and sine table lookup
@@ -259,15 +297,15 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
         DAC_output_0 = fix2int15(multfix15(current_amplitude_0,
             sin_table[phase_accum_main_0>>24])) + 2048 ;
         
-        if (direction_0==0 || direction_0==4): {
+        if (direction_0==0 || direction_0==4){
             ILD = 0.1736 ;
             ITD = 25 ;
         }
-        else if (direction_0==1 || direction_0==3): {
+        else if (direction_0==1 || direction_0==3){
             ILD = 0.7 ;
             ITD = 16 ;
         }
-        else if (direction_0==2): {
+        else if (direction_0==2){
             ILD = 1 ;
             ITD = 0 ;
         }
@@ -388,6 +426,9 @@ static PT_THREAD (protothread_core_0(struct pt *pt))
         // printf("\n\n") ;
         // signal other core
         PT_SEM_SAFE_SIGNAL(pt, &core_1_go) ;
+
+        printf("old directions: %d, %d\n", old_direction_0, old_direction_1);
+        printf("state : %d, %d\n", STATE_0, STATE_1);
     }
     // Indicate thread end
     PT_END(pt) ;
@@ -399,6 +440,7 @@ static PT_THREAD (protothread_serial(struct pt *pt))
     PT_BEGIN(pt) ;
     static char classifier ;
     static int test_in ;
+    static int old_test = 10;
     static float float_in ;
     while(1) {
 
@@ -408,6 +450,21 @@ static PT_THREAD (protothread_serial(struct pt *pt))
         sscanf(pt_serial_in_buffer,"%d", &test_in) ;
         direction_0 = test_in ;
         direction_1 = test_in ;
+
+
+        // printf("input desired direction (0-5) : ");
+        // if (test_in==2) {
+        //     STATE_0=0;
+        //     STATE_1=0;
+        // }
+        // else if (test_in==0 || test_in==1) {
+        //     STATE_0=0;
+        //     STATE_1=2;
+        // }
+        // else if (test_in==3 || test_in==4) {
+        //     STATE_0=2;
+        //     STATE_1=0;
+        // }
     }
     PT_END(pt) ;
 }
@@ -466,6 +523,40 @@ int main() {
 
     gpio_init(CORE_0) ;
     gpio_init(CORE_1) ;
+
+    ///////////////////////////////////////////////////////////////////////////////
+    // ============================== ADC CONFIGURATION ==========================
+    //////////////////////////////////////////////////////////////////////////////
+    // Init GPIO for analogue use: hi-Z, no pulls, disable digital input buffer.
+    // adc_gpio_init(ADC_PIN_26);
+    // adc_gpio_init(ADC_PIN_27);
+
+
+    // // Initialize the ADC harware
+    // // (resets it, enables the clock, spins until the hardware is ready)
+    // adc_init() ;
+
+    // // Select analog mux input (0...3 are GPIO 26, 27, 28, 29; 4 is temp sensor)
+    // adc_select_input(ADC_CHAN_0) ;
+
+    // // Setup the FIFO
+    // adc_fifo_setup(
+    //     true,    // Write each completed conversion to the sample FIFO
+    //     true,    // Enable DMA data request (DREQ)
+    //     1,       // DREQ (and IRQ) asserted when at least 1 sample present
+    //     false,   // We won't see the ERR bit because of 8 bit reads; disable.
+    //     true     // Shift each sample to 8 bits when pushing to FIFO
+    // );
+
+    // // Divisor of 0 -> full speed. Free-running capture with the divider is
+    // // equivalent to pressing the ADC_CS_START_ONCE button once per `div + 1`
+    // // cycles (div not necessarily an integer). Each conversion takes 96
+    // // cycles, so in general you want a divider of 0 (hold down the button
+    // // continuously) or > 95 (take samples less frequently than 96 cycle
+    // // intervals). This is all timed by the 48 MHz ADC clock. This is setup
+    // // to grab a sample at 10kHz (48Mhz/10kHz - 1)
+    // adc_set_clkdiv(ADCCLK/Fs);
+
 
     // set up increments for calculating bow envelope
     attack_inc = divfix(max_amplitude, int2fix15(ATTACK_TIME)) ;
