@@ -164,13 +164,32 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
         old_direction_1 = direction_1;
         if (direction_1==2) {
             STATE_1=0;
+            count_1=0;
+            current_amplitude_1 = 0 ;
         }
         else if (direction_1==0 || direction_1==1) {
             STATE_1=2;
+            count_1=0;
+            current_amplitude_1 = 0 ;
         }
         else if (direction_1==3 || direction_1==4) {
             STATE_1=0;
+            count_1=0;
+            current_amplitude_1 = 0 ;
         }
+    }
+
+    if (direction_1==0 || direction_1==4){
+        ILD = float2fix15(0.7) ;
+        ITD = 16 ;
+    }
+    else if (direction_1==1 || direction_1==3){
+        ILD = float2fix15(0.9) ; // 20 degrees
+        ITD = 7 ; // 20 degrees
+    }
+    else if (direction_1==2){
+        ILD = float2fix15(1) ;
+        ITD = 0 ;
     }
         
     if (STATE_1 == 0) {
@@ -187,20 +206,6 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
         // else if (max_amplitude > global_max_amplitude) max_amplitude = global_max_amplitude;
 
         // max_amplitude_left = multfix15( max_amplitude , ILD);
-
-        if (direction_1==0 || direction_1==4){
-            ILD = 0.1736 ;
-            ITD = 25 ;
-        }
-        else if (direction_1==1 || direction_1==3){
-            ILD = 0.7 ;
-            ITD = 16 ;
-        }
-        else if (direction_1==2){
-            ILD = 1 ;
-            ITD = 0 ;
-        }
-
 
 
         max_amplitude_left = multfix15( max_amplitude , ILD);
@@ -249,8 +254,6 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
             count_1 = 0 ;
             current_amplitude_1 = 0 ;
 
-            // PROBLEM AREA: check logic for entering state 2
-
             if(direction_1==1 || direction_1==0){
                 STATE_1 = 2 ;           
             }else{
@@ -268,8 +271,6 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
     // retrieve core number of execution
     corenum_1 = get_core_num() ;
 
-    
-
     return true;
     
 }
@@ -282,33 +283,40 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
         old_direction_0 = direction_0;
         if (direction_0==2) {
             STATE_0=0;
+            count_0=0;
+            current_amplitude_0 = 0 ;
         }
         else if (direction_0==0 || direction_0==1) {
             STATE_0=0;
+            count_0=0;
+            current_amplitude_0 = 0 ;
         }
         else if (direction_0==3 || direction_0==4) {
             STATE_0=2;
+            count_0=0;
+            current_amplitude_0 = 0 ;
         }
     }
+
+    if (direction_0==0 || direction_0==4){
+        ILD = float2fix15(0.7) ;
+        ITD = 16 ;
+    }
+    else if (direction_0==1 || direction_0==3){
+        ILD = float2fix15(0.9) ; // 20 degrees
+        ITD = 7 ; // 20 degrees
+    }
+    else if (direction_0==2){
+        ILD = float2fix15(1) ;
+        ITD = 0 ;
+    }
+
     if (STATE_0 == 0) {
 
         // DDS phase and sine table lookup
         phase_accum_main_0 += phase_incr_main_0  ;
         DAC_output_0 = fix2int15(multfix15(current_amplitude_0,
             sin_table[phase_accum_main_0>>24])) + 2048 ;
-        
-        if (direction_0==0 || direction_0==4){
-            ILD = 0.1736 ;
-            ITD = 25 ;
-        }
-        else if (direction_0==1 || direction_0==3){
-            ILD = 0.7 ;
-            ITD = 16 ;
-        }
-        else if (direction_0==2){
-            ILD = 1 ;
-            ITD = 0 ;
-        }
 
 
         max_amplitude_right = multfix15( max_amplitude , ILD);
@@ -402,6 +410,7 @@ static PT_THREAD (protothread_core_1(struct pt *pt))
         // printf("\n\n") ;
         // signal other core
         PT_SEM_SAFE_SIGNAL(pt, &core_0_go) ;
+        printf("Max amplitude left: %lf", fix2float15(max_amplitude_left));
     }
     // Indicate thread end
     PT_END(pt) ;
@@ -429,6 +438,7 @@ static PT_THREAD (protothread_core_0(struct pt *pt))
 
         // printf("old directions: %d, %d\n", old_direction_0, old_direction_1);
         // printf("state : %d, %d\n", STATE_0, STATE_1);
+        printf("Max amplitude right: %lf", fix2float15(max_amplitude_right));
     }
     // Indicate thread end
     PT_END(pt) ;
