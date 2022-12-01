@@ -154,122 +154,144 @@ volatile int delay_counter ;
 // ADC Channel and pin
 #define ADC_CHAN_0 0
 #define ADC_CHAN_1 1
+#define ADC_CHAN_2 2
+#define ADC_PIN_28 28
 #define ADC_PIN_26 26
 #define ADC_PIN_27 27
+
+// joystick pins
+#define JOYSTICK_VY 16
+#define JOYSTICK_VX 17
+
+// audio inputs
+int adc_audio_0;
+int adc_audio_1;
 
 
 // This timer ISR is called on core 1 - LEFT
 bool repeating_timer_callback_core_1(struct repeating_timer *t) {
-    if (direction_1 != old_direction_1) {
-        old_direction_1 = direction_1;
-        if (direction_1==2) {
-            STATE_1=0;
-            count_1=0;
-            current_amplitude_1 = 0 ;
-        }
-        else if (direction_1==0 || direction_1==1) {
-            STATE_1=2;
-            count_1=0;
-            current_amplitude_1 = 0 ;
-        }
-        else if (direction_1==3 || direction_1==4) {
-            STATE_1=0;
-            count_1=0;
-            current_amplitude_1 = 0 ;
-        }
-    }
 
-    if (direction_1==0 || direction_1==4){
-        ILD = float2fix15(0.7) ;
-        ITD = 16 ;
-    }
-    else if (direction_1==1 || direction_1==3){
-        ILD = float2fix15(0.9) ; // 20 degrees
-        ITD = 7 ; // 20 degrees
-    }
-    else if (direction_1==2){
-        ILD = float2fix15(1) ;
-        ITD = 0 ;
-    }
+    adc_select_input(0);
+    
+    adc_audio_1 = (int) adc_read();
+    
+    // Mask with DAC control bits
+    DAC_data_1 = (DAC_config_chan_A | (adc_audio_1 & 0xfff))  ;
+
+    // // SPI write (no spinlock b/c of SPI buffer)
+    spi_write16_blocking(SPI_PORT, &DAC_data_1, 1) ;
+
+    // spi_write16_blocking(SPI_PORT, &DAC_data_0, 1) ;
+    // if (direction_1 != old_direction_1) {
+    //     old_direction_1 = direction_1;
+    //     if (direction_1==2) {
+    //         STATE_1=0;
+    //         count_1=0;
+    //         current_amplitude_1 = 0 ;
+    //     }
+    //     else if (direction_1==0 || direction_1==1) {
+    //         STATE_1=2;
+    //         count_1=0;
+    //         current_amplitude_1 = 0 ;
+    //     }
+    //     else if (direction_1==3 || direction_1==4) {
+    //         STATE_1=0;
+    //         count_1=0;
+    //         current_amplitude_1 = 0 ;
+    //     }
+    // }
+
+    // if (direction_1==0 || direction_1==4){
+    //     ILD = float2fix15(0.7) ;
+    //     ITD = 16 ;
+    // }
+    // else if (direction_1==1 || direction_1==3){
+    //     ILD = float2fix15(0.9) ; // 20 degrees
+    //     ITD = 7 ; // 20 degrees
+    // }
+    // else if (direction_1==2){
+    //     ILD = float2fix15(1) ;
+    //     ITD = 0 ;
+    // }
         
-    if (STATE_1 == 0) {
-        // DDS phase and sine table lookup
-        phase_accum_main_1 += phase_incr_main_1  ;
-        DAC_output_1 = fix2int15(multfix15(current_amplitude_1,
-            sin_table[phase_accum_main_1>>24])) + 2048 ;
+    // if (STATE_1 == 0) {
+    //     // DDS phase and sine table lookup
+    //     phase_accum_main_1 += phase_incr_main_1  ;
+    //     DAC_output_1 = fix2int15(multfix15(current_amplitude_1,
+    //         sin_table[phase_accum_main_1>>24])) + 2048 ;
         
-        // intensity decay tuning -- customized for each audio source
-        // intensity_diff = (10 * log(sqrt((x_dist*x_dist)+(y_dist*y_dist))/6) / log(10)) - 2;
-        // max_amplitude = global_max_amplitude - float2fix15(intensity_diff);
+    //     // intensity decay tuning -- customized for each audio source
+    //     // intensity_diff = (10 * log(sqrt((x_dist*x_dist)+(y_dist*y_dist))/6) / log(10)) - 2;
+    //     // max_amplitude = global_max_amplitude - float2fix15(intensity_diff);
 
-        // if (max_amplitude < 0) max_amplitude = int2fix15(0);
-        // else if (max_amplitude > global_max_amplitude) max_amplitude = global_max_amplitude;
+    //     // if (max_amplitude < 0) max_amplitude = int2fix15(0);
+    //     // else if (max_amplitude > global_max_amplitude) max_amplitude = global_max_amplitude;
 
-        // max_amplitude_left = multfix15( max_amplitude , ILD);
+    //     // max_amplitude_left = multfix15( max_amplitude , ILD);
 
 
-        max_amplitude_left = multfix15( max_amplitude , ILD);
-        attack_inc_left = divfix(max_amplitude_left, int2fix15(ATTACK_TIME));
-        decay_inc_left = divfix(max_amplitude_left, int2fix15(DECAY_TIME));
+    //     max_amplitude_left = multfix15( max_amplitude , ILD);
+    //     attack_inc_left = divfix(max_amplitude_left, int2fix15(ATTACK_TIME));
+    //     decay_inc_left = divfix(max_amplitude_left, int2fix15(DECAY_TIME));
 
-        if(direction_1==1 || direction_1==0) {
-            // Ramp up amplitude
-            if (count_1 < ATTACK_TIME) {
-                current_amplitude_1 = (current_amplitude_1 + attack_inc_left) ;
-            }
-            // Ramp down amplitude
-            else if (count_1 > BEEP_DURATION - DECAY_TIME) {
-                current_amplitude_1 = (current_amplitude_1 - decay_inc_left) ;
-            }
-        }
-        else {
-            // Ramp up amplitude
-            if (count_1 < ATTACK_TIME) {
-                current_amplitude_1 = (current_amplitude_1 + attack_inc) ;
-            }
-            // Ramp down amplitude
-            else if (count_1 > BEEP_DURATION - DECAY_TIME) {
-                current_amplitude_1 = (current_amplitude_1 - decay_inc) ;
-            }
-        }
+    //     if(direction_1==1 || direction_1==0) {
+    //         // Ramp up amplitude
+    //         if (count_1 < ATTACK_TIME) {
+    //             current_amplitude_1 = (current_amplitude_1 + attack_inc_left) ;
+    //         }
+    //         // Ramp down amplitude
+    //         else if (count_1 > BEEP_DURATION - DECAY_TIME) {
+    //             current_amplitude_1 = (current_amplitude_1 - decay_inc_left) ;
+    //         }
+    //     }
+    //     else {
+    //         // Ramp up amplitude
+    //         if (count_1 < ATTACK_TIME) {
+    //             current_amplitude_1 = (current_amplitude_1 + attack_inc) ;
+    //         }
+    //         // Ramp down amplitude
+    //         else if (count_1 > BEEP_DURATION - DECAY_TIME) {
+    //             current_amplitude_1 = (current_amplitude_1 - decay_inc) ;
+    //         }
+    //     }
 
-        // Mask with DAC control bits
-        DAC_data_1 = (DAC_config_chan_A | (DAC_output_1 & 0xffff))  ;
+    //     // Mask with DAC control bits
+    //     DAC_data_1 = (DAC_config_chan_A | (DAC_output_1 & 0xffff))  ;
 
-        // SPI write (no spinlock b/c of SPI buffer)
-        spi_write16_blocking(SPI_PORT, &DAC_data_1, 1) ;
+    //     // SPI write (no spinlock b/c of SPI buffer)
+    //     spi_write16_blocking(SPI_PORT, &DAC_data_1, 1) ;
 
-        // Increment the counter
-        count_1 += 1 ;
+    //     // Increment the counter
+    //     count_1 += 1 ;
 
-        // State transition?
-        if (count_1 == BEEP_DURATION) {
-            STATE_1 = 1 ;
-            count_1 = 0 ;
-        }
-    }
-    else if(STATE_1 == 1) {
-        count_1 += 1 ;
-        if (count_1 == BEEP_REPEAT_INTERVAL) {
-            count_1 = 0 ;
-            current_amplitude_1 = 0 ;
+    //     // State transition?
+    //     if (count_1 == BEEP_DURATION) {
+    //         STATE_1 = 1 ;
+    //         count_1 = 0 ;
+    //     }
+    // }
+    // else if(STATE_1 == 1) {
+    //     count_1 += 1 ;
+    //     if (count_1 == BEEP_REPEAT_INTERVAL) {
+    //         count_1 = 0 ;
+    //         current_amplitude_1 = 0 ;
 
-            if(direction_1==1 || direction_1==0){
-                STATE_1 = 2 ;           
-            }else{
-                STATE_1 = 0 ;
-            }
-        }
-    }else if(STATE_1 == 2){
-        count_1 += 1 ;
-        if (count_1 == ITD) {
-            count_1 = 0 ;
-            current_amplitude_1 = 0 ;
-            STATE_1 = 0 ;           
-        }
-    }
-    // retrieve core number of execution
-    corenum_1 = get_core_num() ;
+    //         if(direction_1==1 || direction_1==0){
+    //             STATE_1 = 2 ;           
+    //         }else{
+    //             STATE_1 = 0 ;
+    //         }
+    //     }
+    // }else if(STATE_1 == 2){
+    //     count_1 += 1 ;
+    //     if (count_1 == ITD) {
+    //         count_1 = 0 ;
+    //         current_amplitude_1 = 0 ;
+    //         STATE_1 = 0 ;           
+    //     }
+    // }
+    // // retrieve core number of execution
+    // corenum_1 = get_core_num() ;
 
     return true;
     
@@ -279,112 +301,124 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
 bool repeating_timer_callback_core_0(struct repeating_timer *t) {
     // delay_counter++;
 
-    if (direction_0 != old_direction_0) {
-        old_direction_0 = direction_0;
-        if (direction_0==2) {
-            STATE_0=0;
-            count_0=0;
-            current_amplitude_0 = 0 ;
-        }
-        else if (direction_0==0 || direction_0==1) {
-            STATE_0=0;
-            count_0=0;
-            current_amplitude_0 = 0 ;
-        }
-        else if (direction_0==3 || direction_0==4) {
-            STATE_0=2;
-            count_0=0;
-            current_amplitude_0 = 0 ;
-        }
-    }
+    adc_select_input(2);
+    
+    adc_audio_0 = (int) adc_read();
+    
+    // Mask with DAC control bits
+    DAC_data_0 = (DAC_config_chan_B | (adc_audio_0 & 0xfff))  ;
 
-    if (direction_0==0 || direction_0==4){
-        ILD = float2fix15(0.7) ;
-        ITD = 16 ;
-    }
-    else if (direction_0==1 || direction_0==3){
-        ILD = float2fix15(0.9) ; // 20 degrees
-        ITD = 7 ; // 20 degrees
-    }
-    else if (direction_0==2){
-        ILD = float2fix15(1) ;
-        ITD = 0 ;
-    }
+    // SPI write (no spinlock b/c of SPI buffer)
+    // spi_write16_blocking(SPI_PORT, &DAC_data_0, 1) ;
+    spi_write16_blocking(SPI_PORT, &DAC_data_0, 1) ;
 
-    if (STATE_0 == 0) {
-
-        // DDS phase and sine table lookup
-        phase_accum_main_0 += phase_incr_main_0  ;
-        DAC_output_0 = fix2int15(multfix15(current_amplitude_0,
-            sin_table[phase_accum_main_0>>24])) + 2048 ;
-
-
-        max_amplitude_right = multfix15( max_amplitude , ILD);
-        attack_inc_right = divfix(max_amplitude_right, int2fix15(ATTACK_TIME));
-        decay_inc_right = divfix(max_amplitude_right, int2fix15(DECAY_TIME));
-
-        if(direction_0==3 || direction_0==4){
-            // Ramp up amplitude
-            if (count_0 < ATTACK_TIME) {
-                current_amplitude_0 = (current_amplitude_0 + attack_inc_right) ;
-            }
-            // Ramp down amplitude
-            else if (count_0 > BEEP_DURATION - DECAY_TIME) {
-                current_amplitude_0 = (current_amplitude_0 - decay_inc_right) ;
-            }
-        }
-        else {
-            // Ramp up amplitude
-            if (count_0 < ATTACK_TIME) {
-                current_amplitude_0 = (current_amplitude_0 + attack_inc) ;
-            }
-            // Ramp down amplitude
-            else if (count_0 > BEEP_DURATION - DECAY_TIME) {
-                current_amplitude_0 = (current_amplitude_0 - decay_inc) ;
-            }
-        }
-
-        // Mask with DAC control bits
-        DAC_data_0 = (DAC_config_chan_B | (DAC_output_0 & 0xffff))  ;
-
-        // SPI write (no spinlock b/c of SPI buffer)
-        spi_write16_blocking(SPI_PORT, &DAC_data_0, 1) ;
-
-        // Increment the counter
-        count_0 += 1 ;
-
-        // State transition?
-        if (count_0 == BEEP_DURATION) {
-            STATE_0 = 1 ;
-            count_0 = 0 ;
-        }
-    }
-    else if(STATE_0 == 1) {
-        count_0 += 1 ;
-        if (count_0 == BEEP_REPEAT_INTERVAL) {
-            count_0 = 0 ;
-            current_amplitude_0 = 0 ;
-
-            if(direction_0==3 || direction_0==4){
-                STATE_0 = 2 ;           
-            }else{
-                STATE_0 = 0 ;
-            }
-        }
-    }else if(STATE_0 == 2){
-        count_0 += 1 ;
-        if (count_0 == ITD) {
-            count_0 = 0 ;
-            current_amplitude_0 = 0 ;
-            STATE_0 = 0 ;      
-        }
-    }
-    // retrieve core number of execution
-    corenum_0 = get_core_num() ;
-    // if (delay_counter == ITD*40000) {
-    //     delay_counter = 0;
-        
+    // if (direction_0 != old_direction_0) {
+    //     old_direction_0 = direction_0;
+    //     if (direction_0==2) {
+    //         STATE_0=0;
+    //         count_0=0;
+    //         current_amplitude_0 = 0 ;
+    //     }
+    //     else if (direction_0==0 || direction_0==1) {
+    //         STATE_0=0;
+    //         count_0=0;
+    //         current_amplitude_0 = 0 ;
+    //     }
+    //     else if (direction_0==3 || direction_0==4) {
+    //         STATE_0=2;
+    //         count_0=0;
+    //         current_amplitude_0 = 0 ;
+    //     }
     // }
+
+    // if (direction_0==0 || direction_0==4){
+    //     ILD = float2fix15(0.7) ;
+    //     ITD = 16 ;
+    // }
+    // else if (direction_0==1 || direction_0==3){
+    //     ILD = float2fix15(0.9) ; // 20 degrees
+    //     ITD = 7 ; // 20 degrees
+    // }
+    // else if (direction_0==2){
+    //     ILD = float2fix15(1) ;
+    //     ITD = 0 ;
+    // }
+
+    // if (STATE_0 == 0) {
+
+    //     // DDS phase and sine table lookup
+    //     phase_accum_main_0 += phase_incr_main_0  ;
+    //     DAC_output_0 = fix2int15(multfix15(current_amplitude_0,
+    //         sin_table[phase_accum_main_0>>24])) + 2048 ;
+
+
+    //     max_amplitude_right = multfix15( max_amplitude , ILD);
+    //     attack_inc_right = divfix(max_amplitude_right, int2fix15(ATTACK_TIME));
+    //     decay_inc_right = divfix(max_amplitude_right, int2fix15(DECAY_TIME));
+
+    //     if(direction_0==3 || direction_0==4){
+    //         // Ramp up amplitude
+    //         if (count_0 < ATTACK_TIME) {
+    //             current_amplitude_0 = (current_amplitude_0 + attack_inc_right) ;
+    //         }
+    //         // Ramp down amplitude
+    //         else if (count_0 > BEEP_DURATION - DECAY_TIME) {
+    //             current_amplitude_0 = (current_amplitude_0 - decay_inc_right) ;
+    //         }
+    //     }
+    //     else {
+    //         // Ramp up amplitude
+    //         if (count_0 < ATTACK_TIME) {
+    //             current_amplitude_0 = (current_amplitude_0 + attack_inc) ;
+    //         }
+    //         // Ramp down amplitude
+    //         else if (count_0 > BEEP_DURATION - DECAY_TIME) {
+    //             current_amplitude_0 = (current_amplitude_0 - decay_inc) ;
+    //         }
+    //     }
+
+    //     // // Mask with DAC control bits
+    //     // DAC_data_0 = (DAC_config_chan_B | (adc_audio & 0xffff))  ;
+
+    //     // // SPI write (no spinlock b/c of SPI buffer)
+    //     // // spi_write16_blocking(SPI_PORT, &DAC_data_0, 1) ;
+    //     // spi_write16_blocking(SPI_PORT, &DAC_data_0, 1) ;
+
+    //     // Increment the counter
+    //     count_0 += 1 ;
+
+    //     // State transition?
+    //     if (count_0 == BEEP_DURATION) {
+    //         STATE_0 = 1 ;
+    //         count_0 = 0 ;
+    //     }
+    // }
+    // else if(STATE_0 == 1) {
+    //     count_0 += 1 ;
+    //     if (count_0 == BEEP_REPEAT_INTERVAL) {
+    //         count_0 = 0 ;
+    //         current_amplitude_0 = 0 ;
+
+    //         if(direction_0==3 || direction_0==4){
+    //             STATE_0 = 2 ;           
+    //         }else{
+    //             STATE_0 = 0 ;
+    //         }
+    //     }
+    // }else if(STATE_0 == 2){
+    //     count_0 += 1 ;
+    //     if (count_0 == ITD) {
+    //         count_0 = 0 ;
+    //         current_amplitude_0 = 0 ;
+    //         STATE_0 = 0 ;      
+    //     }
+    // }
+    // // retrieve core number of execution
+    // corenum_0 = get_core_num() ;
+    // // if (delay_counter == ITD*40000) {
+    // //     delay_counter = 0;
+        
+    // // }
     
 
     return true;
@@ -478,52 +512,61 @@ static PT_THREAD (protothread_serial(struct pt *pt))
     }
     PT_END(pt) ;
 }
-
+// static PT_THREAD (protothread_audio(struct pt *pt))
+// {
+//     PT_BEGIN(pt) ;
+//     adc_select_input(2);
+//     while(1) {
+//         adc_audio = (int) adc_read();
+//         printf("adc : %d\n", adc_read());
+//     }
+//     PT_END(pt) ;
+// }
 // User joystick. User can change direction of sound
-static PT_THREAD (protothread_joystick(struct pt *pt))
-{
-    PT_BEGIN(pt) ;
+// static PT_THREAD (protothread_joystick(struct pt *pt))
+// {
+//     PT_BEGIN(pt) ;
 
-    while(1) {
-        adc_select_input(0);
-        uint adc_x_raw = adc_read();
-        adc_select_input(1);
-        uint adc_y_raw = adc_read();
+//     while(1) {
+//         adc_select_input(0);
+//         uint adc_x_raw = adc_read();
+//         adc_select_input(1);
+//         uint adc_y_raw = adc_read();
 
-        if (adc_y_raw > 2000){
-            if(adc_x_raw <1700) { // front left
-                printf("3 section\n");
-                direction_0=3 ;
-                direction_1=3 ;
-            }
-            else if(adc_x_raw >3000){ // front right
-                printf("1 section\n");
-                direction_0=1 ;
-                direction_1=1 ;
-            }
-            else {
-                printf("2 section\n"); // front
-                direction_0=2 ;
-                direction_1=2 ;
-            }
-        }
-        // back
-        else {
-            if(adc_x_raw <2000) { // back left
-                printf("4 section\n");
-                direction_0=4 ;
-                direction_1=4 ;
-            }
-            else if(adc_x_raw >=2000){ // back right
-                printf("0 section\n");
-                direction_0=0 ;
-                direction_1=0 ;
-            }
-        }
+//         if (adc_y_raw > 2000){
+//             if(adc_x_raw <1700) { // front left
+//                 printf("3 section\n");
+//                 direction_0=3 ;
+//                 direction_1=3 ;
+//             }
+//             else if(adc_x_raw >3000){ // front right
+//                 printf("1 section\n");
+//                 direction_0=1 ;
+//                 direction_1=1 ;
+//             }
+//             else {
+//                 printf("2 section\n"); // front
+//                 direction_0=2 ;
+//                 direction_1=2 ;
+//             }
+//         }
+//         // back
+//         else {
+//             if(adc_x_raw <2000) { // back left
+//                 printf("4 section\n");
+//                 direction_0=4 ;
+//                 direction_1=4 ;
+//             }
+//             else if(adc_x_raw >=2000){ // back right
+//                 printf("0 section\n");
+//                 direction_0=0 ;
+//                 direction_1=0 ;
+//             }
+//         }
         
-    }
-    PT_END(pt) ;
-}
+//     }
+//     PT_END(pt) ;
+// }
 
 // This is the core 1 entry point - LEFT ear
 void core1_entry() {
@@ -586,6 +629,7 @@ int main() {
     // Make sure GPIO is high-impedance, no pullups etc
     adc_gpio_init(26);
     adc_gpio_init(27);
+    adc_gpio_init(28);
 
     // set up increments for calculating bow envelope
     attack_inc = divfix(max_amplitude, int2fix15(ATTACK_TIME)) ;
@@ -615,6 +659,7 @@ int main() {
 
     // Negative delay so means we will call repeating_timer_callback, and call it
     // again 25us (40kHz) later regardless of how long the callback took to execute
+   
     add_repeating_timer_us(-25, 
         repeating_timer_callback_core_0, NULL, &timer_core_0);
 
@@ -623,7 +668,8 @@ int main() {
     // add user interface
     // pt_add_thread(protothread_serial) ;
     // add joystick interface
-    pt_add_thread(protothread_joystick) ;
+    // pt_add_thread(protothread_joystick) ;
+    // pt_add_thread(protothread_audio) ;
     // Start scheduling core 0 threads
     pt_schedule_start ;
 
