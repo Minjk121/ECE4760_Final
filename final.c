@@ -60,8 +60,8 @@ volatile unsigned int phase_incr_main_0 = (2300.0*two32)/Fs ;
 fix15 sin_table[sine_table_size] ;
 
 // Values output to DAC
-int DAC_output_0 ;
-int DAC_output_1 ;
+uint16_t DAC_output_0 ;
+uint16_t DAC_output_1 ;
 
 // Amplitude modulation parameters and variables
 fix15 global_max_amplitude = float2fix15(1.0) ;
@@ -107,10 +107,6 @@ uint16_t DAC_data_0 ; // output value
 #define CORE_0   2
 #define CORE_1   3
 
-// Two variables to store core number
-volatile int corenum_0  ;
-volatile int corenum_1  ;
-
 // Global counter for spinlock experimenting
 volatile int global_counter = 0 ;
 volatile int paused_0 = 0;
@@ -125,15 +121,16 @@ int angle_deg;              // user input
 fix15 angle_rad; 
 int direction_0 = 0;
 int direction_1 = 0;
-volatile int old_direction_0 = 0;
-volatile int old_direction_1 = 0;
+volatile int old_direction_0 = 10;
+volatile int old_direction_1 = 10;
 // fix15 ITD = float2fix15(0.00039507 * 40000); // only for 45 deg : timing delay (seconds)
 // fix15 ILD = float2fix15(0.7071);     // level delay - 45 deg
 // int ITD = 16; //- 45 deg
 // int ITD = 20; // 60 deg
 // fix15 ILD = float2fix15(0.5);     // level delay - 60 deg
 
-fix15 ILD = float2fix15(0.7);     // level delay - 45 deg
+// fix15 ILD = float2fix15(0.7);     // level delay - 45 deg
+float ILD = 0.3;
 int ITD = 16; // 45 deg
 
 fix15 max_amplitude_right ;
@@ -171,19 +168,17 @@ int adc_audio_1;
 // This timer ISR is called on core 1 - LEFT
 bool repeating_timer_callback_core_1(struct repeating_timer *t) {
 
-    adc_select_input(0);
+    adc_select_input(2);
     
     adc_audio_1 = (int) adc_read();
     
     // Mask with DAC control bits
     DAC_data_1 = (DAC_config_chan_A | (adc_audio_1 & 0xfff))  ;
 
-    // // SPI write (no spinlock b/c of SPI buffer)
+    // SPI write (no spinlock b/c of SPI buffer)
     spi_write16_blocking(SPI_PORT, &DAC_data_1, 1) ;
 
-    // spi_write16_blocking(SPI_PORT, &DAC_data_0, 1) ;
     // if (direction_1 != old_direction_1) {
-    //     old_direction_1 = direction_1;
     //     if (direction_1==2) {
     //         STATE_1=0;
     //         count_1=0;
@@ -199,7 +194,6 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
     //         count_1=0;
     //         current_amplitude_1 = 0 ;
     //     }
-    // }
 
     // if (direction_1==0 || direction_1==4){
     //     ILD = float2fix15(0.7) ;
@@ -215,10 +209,11 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
     // }
         
     // if (STATE_1 == 0) {
-    //     // DDS phase and sine table lookup
-    //     phase_accum_main_1 += phase_incr_main_1  ;
-    //     DAC_output_1 = fix2int15(multfix15(current_amplitude_1,
-    //         sin_table[phase_accum_main_1>>24])) + 2048 ;
+    //     old_direction_1 = direction_1;
+    //     // // DDS phase and sine table lookup
+    //     // phase_accum_main_1 += phase_incr_main_1  ;
+    //     // DAC_output_1 = fix2int15(multfix15(current_amplitude_1,
+    //     //     sin_table[phase_accum_main_1>>24])) + 2048 ;
         
     //     // intensity decay tuning -- customized for each audio source
     //     // intensity_diff = (10 * log(sqrt((x_dist*x_dist)+(y_dist*y_dist))/6) / log(10)) - 2;
@@ -230,59 +225,63 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
     //     // max_amplitude_left = multfix15( max_amplitude , ILD);
 
 
-    //     max_amplitude_left = multfix15( max_amplitude , ILD);
-    //     attack_inc_left = divfix(max_amplitude_left, int2fix15(ATTACK_TIME));
-    //     decay_inc_left = divfix(max_amplitude_left, int2fix15(DECAY_TIME));
+    //     // max_amplitude_left = multfix15( max_amplitude , ILD);
+    //     // attack_inc_left = divfix(max_amplitude_left, int2fix15(ATTACK_TIME));
+    //     // decay_inc_left = divfix(max_amplitude_left, int2fix15(DECAY_TIME));
 
     //     if(direction_1==1 || direction_1==0) {
-    //         // Ramp up amplitude
-    //         if (count_1 < ATTACK_TIME) {
-    //             current_amplitude_1 = (current_amplitude_1 + attack_inc_left) ;
-    //         }
-    //         // Ramp down amplitude
-    //         else if (count_1 > BEEP_DURATION - DECAY_TIME) {
-    //             current_amplitude_1 = (current_amplitude_1 - decay_inc_left) ;
-    //         }
+    //         // // Ramp up amplitude
+    //         // if (count_1 < ATTACK_TIME) {
+    //         //     current_amplitude_1 = (current_amplitude_1 + attack_inc_left) ;
+    //         // }
+    //         // // Ramp down amplitude
+    //         // else if (count_1 > BEEP_DURATION - DECAY_TIME) {
+    //         //     current_amplitude_1 = (current_amplitude_1 - decay_inc_left) ;
+    //         // }
+    //         DAC_output_1 = DAC_data_0*(uint16_t) ILD ;
+    //         spi_write16_blocking(SPI_PORT, &(DAC_output_1), 1) ;
     //     }
     //     else {
-    //         // Ramp up amplitude
-    //         if (count_1 < ATTACK_TIME) {
-    //             current_amplitude_1 = (current_amplitude_1 + attack_inc) ;
-    //         }
-    //         // Ramp down amplitude
-    //         else if (count_1 > BEEP_DURATION - DECAY_TIME) {
-    //             current_amplitude_1 = (current_amplitude_1 - decay_inc) ;
-    //         }
+    //         // // Ramp up amplitude
+    //         // if (count_1 < ATTACK_TIME) {
+    //         //     current_amplitude_1 = (current_amplitude_1 + attack_inc) ;
+    //         // }
+    //         // // Ramp down amplitude
+    //         // else if (count_1 > BEEP_DURATION - DECAY_TIME) {
+    //         //     current_amplitude_1 = (current_amplitude_1 - decay_inc) ;
+    //         // }
+    //         spi_write16_blocking(SPI_PORT, &(DAC_data_0), 1) ;
     //     }
 
-    //     // Mask with DAC control bits
-    //     DAC_data_1 = (DAC_config_chan_A | (DAC_output_1 & 0xffff))  ;
+    //     // // Mask with DAC control bits
+    //     // DAC_data_1 = (DAC_config_chan_A | (DAC_output_1 & 0xffff))  ;
 
-    //     // SPI write (no spinlock b/c of SPI buffer)
-    //     spi_write16_blocking(SPI_PORT, &DAC_data_1, 1) ;
+    //     // // SPI write (no spinlock b/c of SPI buffer)
+    //     // spi_write16_blocking(SPI_PORT, &DAC_data_1, 1) ;
 
     //     // Increment the counter
     //     count_1 += 1 ;
 
-    //     // State transition?
-    //     if (count_1 == BEEP_DURATION) {
-    //         STATE_1 = 1 ;
-    //         count_1 = 0 ;
-    //     }
+    //     // // State transition?
+    //     // if (count_1 == BEEP_DURATION) {
+    //     //     STATE_1 = 1 ;
+    //     //     count_1 = 0 ;
+    //     // }
     // }
-    // else if(STATE_1 == 1) {
-    //     count_1 += 1 ;
-    //     if (count_1 == BEEP_REPEAT_INTERVAL) {
-    //         count_1 = 0 ;
-    //         current_amplitude_1 = 0 ;
+    // // else if(STATE_1 == 1) {
+    // //     count_1 += 1 ;
+    // //     if (count_1 == BEEP_REPEAT_INTERVAL) {
+    // //         count_1 = 0 ;
+    // //         current_amplitude_1 = 0 ;
 
-    //         if(direction_1==1 || direction_1==0){
-    //             STATE_1 = 2 ;           
-    //         }else{
-    //             STATE_1 = 0 ;
-    //         }
-    //     }
-    // }else if(STATE_1 == 2){
+    // //         if(direction_1==1 || direction_1==0){
+    // //             STATE_1 = 2 ;           
+    // //         }else{
+    // //             STATE_1 = 0 ;
+    // //         }
+    // //     }
+    // // }
+    // else if(STATE_1 == 2){
     //     count_1 += 1 ;
     //     if (count_1 == ITD) {
     //         count_1 = 0 ;
@@ -290,8 +289,7 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
     //         STATE_1 = 0 ;           
     //     }
     // }
-    // // retrieve core number of execution
-    // corenum_1 = get_core_num() ;
+    // }
 
     return true;
     
@@ -303,17 +301,28 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
 
     adc_select_input(2);
     
-    adc_audio_0 = (int) adc_read();
+    adc_audio_0 = (int) ((float)adc_read() * ILD);
     
     // Mask with DAC control bits
     DAC_data_0 = (DAC_config_chan_B | (adc_audio_0 & 0xfff))  ;
 
+    spi_write16_blocking(SPI_PORT, &(DAC_data_0), 1) ;
+
+    // // FOR TWO SOUNDS TO ONE OUTPUT (need to scale values to under 3.3V)
+    // adc_select_input(0);
+    
+    // adc_audio_1 = (int) adc_read();
+    
+    // // Mask with DAC control bits
+    // DAC_data_1 = (DAC_config_chan_A | ((adc_audio_1 + adc_audio_0) & 0xfff))  ;
+
+    // // SPI write (no spinlock b/c of SPI buffer)
+    // spi_write16_blocking(SPI_PORT, &DAC_data_1, 1) ;
+
     // SPI write (no spinlock b/c of SPI buffer)
     // spi_write16_blocking(SPI_PORT, &DAC_data_0, 1) ;
-    spi_write16_blocking(SPI_PORT, &DAC_data_0, 1) ;
 
     // if (direction_0 != old_direction_0) {
-    //     old_direction_0 = direction_0;
     //     if (direction_0==2) {
     //         STATE_0=0;
     //         count_0=0;
@@ -329,7 +338,6 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
     //         count_0=0;
     //         current_amplitude_0 = 0 ;
     //     }
-    // }
 
     // if (direction_0==0 || direction_0==4){
     //     ILD = float2fix15(0.7) ;
@@ -345,36 +353,39 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
     // }
 
     // if (STATE_0 == 0) {
-
+    //     old_direction_0 = direction_0;
     //     // DDS phase and sine table lookup
-    //     phase_accum_main_0 += phase_incr_main_0  ;
-    //     DAC_output_0 = fix2int15(multfix15(current_amplitude_0,
-    //         sin_table[phase_accum_main_0>>24])) + 2048 ;
+    //     // phase_accum_main_0 += phase_incr_main_0  ;
+    //     // DAC_output_0 = fix2int15(multfix15(current_amplitude_0,
+    //     //     sin_table[phase_accum_main_0>>24])) + 2048 ;
 
 
-    //     max_amplitude_right = multfix15( max_amplitude , ILD);
-    //     attack_inc_right = divfix(max_amplitude_right, int2fix15(ATTACK_TIME));
-    //     decay_inc_right = divfix(max_amplitude_right, int2fix15(DECAY_TIME));
+    //     // max_amplitude_right = multfix15( max_amplitude , ILD);
+    //     // attack_inc_right = divfix(max_amplitude_right, int2fix15(ATTACK_TIME));
+    //     // decay_inc_right = divfix(max_amplitude_right, int2fix15(DECAY_TIME));
 
     //     if(direction_0==3 || direction_0==4){
-    //         // Ramp up amplitude
-    //         if (count_0 < ATTACK_TIME) {
-    //             current_amplitude_0 = (current_amplitude_0 + attack_inc_right) ;
-    //         }
-    //         // Ramp down amplitude
-    //         else if (count_0 > BEEP_DURATION - DECAY_TIME) {
-    //             current_amplitude_0 = (current_amplitude_0 - decay_inc_right) ;
-    //         }
+    //         // // Ramp up amplitude
+    //         // if (count_0 < ATTACK_TIME) {
+    //         //     current_amplitude_0 = (current_amplitude_0 + attack_inc_right) ;
+    //         // }
+    //         // // Ramp down amplitude
+    //         // else if (count_0 > BEEP_DURATION - DECAY_TIME) {
+    //         //     current_amplitude_0 = (current_amplitude_0 - decay_inc_right) ;
+    //         // }
+    //         DAC_output_0 = DAC_data_0 * (uint16_t) ILD ;
+    //         spi_write16_blocking(SPI_PORT, &(DAC_output_0), 1) ;
     //     }
     //     else {
-    //         // Ramp up amplitude
-    //         if (count_0 < ATTACK_TIME) {
-    //             current_amplitude_0 = (current_amplitude_0 + attack_inc) ;
-    //         }
-    //         // Ramp down amplitude
-    //         else if (count_0 > BEEP_DURATION - DECAY_TIME) {
-    //             current_amplitude_0 = (current_amplitude_0 - decay_inc) ;
-    //         }
+    //         // // Ramp up amplitude
+    //         // if (count_0 < ATTACK_TIME) {
+    //         //     current_amplitude_0 = (current_amplitude_0 + attack_inc) ;
+    //         // }
+    //         // // Ramp down amplitude
+    //         // else if (count_0 > BEEP_DURATION - DECAY_TIME) {
+    //         //     current_amplitude_0 = (current_amplitude_0 - decay_inc) ;
+    //         // }
+    //         spi_write16_blocking(SPI_PORT, &DAC_data_0, 1) ;
     //     }
 
     //     // // Mask with DAC control bits
@@ -388,24 +399,25 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
     //     count_0 += 1 ;
 
     //     // State transition?
-    //     if (count_0 == BEEP_DURATION) {
-    //         STATE_0 = 1 ;
-    //         count_0 = 0 ;
-    //     }
+    //     // if (count_0 == BEEP_DURATION) {
+    //     //     STATE_0 = 1 ;
+    //     //     count_0 = 0 ;
+    //     // }
     // }
-    // else if(STATE_0 == 1) {
-    //     count_0 += 1 ;
-    //     if (count_0 == BEEP_REPEAT_INTERVAL) {
-    //         count_0 = 0 ;
-    //         current_amplitude_0 = 0 ;
+    // // else if(STATE_0 == 1) {
+    // //     count_0 += 1 ;
+    // //     if (count_0 == BEEP_REPEAT_INTERVAL) {
+    // //         count_0 = 0 ;
+    // //         current_amplitude_0 = 0 ;
 
-    //         if(direction_0==3 || direction_0==4){
-    //             STATE_0 = 2 ;           
-    //         }else{
-    //             STATE_0 = 0 ;
-    //         }
-    //     }
-    // }else if(STATE_0 == 2){
+    // //         if(direction_0==3 || direction_0==4){
+    // //             STATE_0 = 2 ;           
+    // //         }else{
+    // //             STATE_0 = 0 ;
+    // //         }
+    // //     }
+    // // }
+    // else if(STATE_0 == 2){
     //     count_0 += 1 ;
     //     if (count_0 == ITD) {
     //         count_0 = 0 ;
@@ -413,13 +425,7 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
     //         STATE_0 = 0 ;      
     //     }
     // }
-    // // retrieve core number of execution
-    // corenum_0 = get_core_num() ;
-    // // if (delay_counter == ITD*40000) {
-    // //     delay_counter = 0;
-        
-    // // }
-    
+    // }
 
     return true;
     
@@ -439,7 +445,6 @@ static PT_THREAD (protothread_core_1(struct pt *pt))
         for (int i=0; i<10; i++) {
             global_counter += 1 ;
             sleep_ms(250) ;
-            // printf("Core 1: %d, ISR core: %d\n", global_counter, corenum_1) ;
         }
         // printf("\n\n") ;
         // signal other core
@@ -464,7 +469,6 @@ static PT_THREAD (protothread_core_0(struct pt *pt))
         for (int i=0; i<10; i++) {
             global_counter += 1 ;
             sleep_ms(250) ;
-            // printf("Core 0: %d, ISR core: %d\n", global_counter, corenum_0) ;
         }
         // printf("\n\n") ;
         // signal other core
