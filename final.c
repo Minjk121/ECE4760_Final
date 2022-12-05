@@ -86,8 +86,8 @@ volatile unsigned int syl_num_1 = 0 ;
 uint16_t DAC_data_1 ; // output value
 uint16_t DAC_data_0 ; // output value
 
-float history_r[17] ;
-float history_l[17] ;
+float history_r[21] ;
+float history_l[21] ;
 float new_r ;
 float new_l ;
 
@@ -120,13 +120,21 @@ struct pt_sem core_1_go, core_0_go ;
 #define speed_sound 34000.0   // c
 int angle_deg;              // user input
 fix15 angle_rad; 
-int direction_0 = 2;
-int direction_1 = 2;
-volatile int old_direction_0 = 10;
-volatile int old_direction_1 = 10;
+int direction_r0 = 1;
+int direction_r1 = 1;
+volatile int old_direction_r0 = 10;
+volatile int old_direction_r1 = 10;
 
-float ILD = 0.7;
-int ITD = 16; // 45 deg
+int direction_l0 = 3;
+int direction_l1 = 3;
+volatile int old_direction_l0 = 10;
+volatile int old_direction_l1 = 10;
+
+float ILD_r;
+int ITD_r;
+
+float ILD_l;
+int ITD_l; 
 
 fix15 max_amplitude_right ;
 fix15 attack_inc_right ;
@@ -156,8 +164,10 @@ volatile int delay_counter ;
 #define JOYSTICK_VX 17
 
 // audio inputs
-int adc_audio_0;
-int adc_audio_1;
+int adc_audio_r0;
+int adc_audio_r1;
+int adc_audio_l0;
+int adc_audio_l1;
 
 int joystick[4];
 int direction;
@@ -166,54 +176,94 @@ int direction;
 bool repeating_timer_callback_core_1(struct repeating_timer *t) { 
 
     // second input
-    // adc_select_input(0);
+    adc_select_input(0);
 
-    // new_l = adc_read();
-    // for (int i =1; i<=16; i++) {
-    //     history_l[i] = history_l[i-1];
-    // }
-    // history_l[0] = new_l;
+    new_l = adc_read();
+    for (int i =1; i<=20; i++) {
+        history_l[i] = history_l[i-1];
+    }
+    history_l[0] = new_l;
 
-    // adc_audio_1 = (int) (history_r[ITD]*ILD);
+    // adc_audio_1 = (int) (history_r[ITD_r]*ILD_r);
 
     // DAC_data_1 = (DAC_config_chan_A | (adc_audio_1 & 0xfff))  ;
     
     // spi_write16_blocking(SPI_PORT, &(DAC_data_1), 1) ;   
 
-    if (direction_1 != old_direction_1) {
+    if (direction_r1 != old_direction_r1) {
 
-        if (direction_1==0 || direction_1==4){
-            ILD = 0.7 ;
-            ITD = 16 ;
+        if (direction_r1==0 || direction_r1==4){
+            ILD_r = 0.5 ; // 80
+            ITD_r = 20 ; // 80
         }
-        else if (direction_1==1 || direction_1==3){
-            ILD = 0.9 ; // 20 degrees
-            ITD = 7 ; // 20 degrees
+        else if (direction_r1==1 || direction_r1==3){
+            ILD_r = 0.7 ; // 45
+            ITD_r = 16 ; // 45
         }
-        else if (direction_1==2){
-            ILD = 1 ;
-            ITD = 0 ;
+        else if (direction_r1==2){
+            ILD_r = 1 ;
+            ITD_r = 0 ;
         }
-        old_direction_1 = direction_1;
+        old_direction_r1 = direction_r1;
     }
 
-    if(direction_1==1 || direction_1==0) {
+    if (direction_l1 != old_direction_l1) {
 
-        adc_audio_1 = (int) (history_r[ITD]*ILD);
+        if (direction_l1==0 || direction_l1==4){
+            ILD_l = 0.5 ;
+            ITD_l = 20 ;
+        }
+        else if (direction_l1==1 || direction_l1==3){
+            ILD_l = 0.7 ; // 45
+            ITD_l = 16 ; // 45
+        }
+        else if (direction_l1==2){
+            ILD_l = 1 ;
+            ITD_l = 0 ;
+        }
+        old_direction_l1 = direction_l1;
+    }
 
-        DAC_data_1 = (DAC_config_chan_A | (adc_audio_1 & 0xfff))  ;
-        
-        spi_write16_blocking(SPI_PORT, &(DAC_data_1), 1) ;
+    if (direction_r1==1) {
+
+        adc_audio_r1 = (int) (history_r[ITD_r]*ILD_r)/2;
+    }
+    else if (direction_r1==0) {
+
+        adc_audio_r1 = (int) (history_r[ITD_r]*ILD_r)/6;
+    }
+    else if (direction_r1==4) {
+
+        adc_audio_r1 = (int) (history_r[0])/6;
     }
     else {
 
-        adc_audio_1 = (int) (history_r[0]);
-        // Mask with DAC control bits
-        DAC_data_1 = (DAC_config_chan_A | (adc_audio_1 & 0xfff))  ;
-
-        // SPI write (no spinlock b/c of SPI buffer)
-        spi_write16_blocking(SPI_PORT, &DAC_data_1, 1) ;
+        adc_audio_r1 = (int) (history_r[0])/2;
     }
+
+    if (direction_l1==1) {
+
+        adc_audio_l1 = (int) (history_l[ITD_l]*ILD_l)/2;
+
+    }
+    else if (direction_l1==0) {
+
+        adc_audio_l1 = (int) (history_l[ITD_l]*ILD_l)/6;
+
+    }
+    else if (direction_l1==4){
+
+        adc_audio_l1 = (int) (history_l[0])/6;
+        
+    }
+    else {
+
+        adc_audio_l1 = (int) (history_l[0])/2;
+        
+    }
+
+    DAC_data_1 = (DAC_config_chan_A | ((adc_audio_r1 + adc_audio_l1) & 0xfff))  ;
+    spi_write16_blocking(SPI_PORT, &DAC_data_1, 1) ;
 
     return true;
     
@@ -225,7 +275,7 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
     adc_select_input(2);
 
     new_r = adc_read();
-    for (int i =1; i<=16; i++) {
+    for (int i =1; i<=20; i++) {
         history_r[i] = history_r[i-1];
     }
     history_r[0] = new_r;
@@ -250,41 +300,80 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
     // SPI write (no spinlock b/c of SPI buffer)
     // spi_write16_blocking(SPI_PORT, &DAC_data_0, 1) ;
 
-    if (direction_0 != old_direction_0) {
+    if (direction_r0 != old_direction_r0) {
 
-        if (direction_0==0 || direction_0==4){
-            ILD = 0.7 ;
-            ITD = 16 ;
+        if (direction_r0==0 || direction_r0==4){
+            ILD_r = 0.5 ; // 80 degrees
+            ITD_r = 20 ;
         }
-        else if (direction_0==1 || direction_0==3){
-            ILD = 0.9 ; // 20 degrees
-            ITD = 7 ; // 20 degrees
+        else if (direction_r0==1 || direction_r0==3){
+            ILD_r = 0.7 ; // 45 degrees
+            ITD_r = 16 ; // 45 degrees
         }
-        else if (direction_0==2){
-            ILD = 1 ;
-            ITD = 0 ;
+        else if (direction_r0==2){
+            ILD_r = 1 ;
+            ITD_r = 0 ;
         }
-        old_direction_0 = direction_0;
+        old_direction_r0 = direction_r0;
     }
 
-    if(direction_0==3 || direction_0==4){
+    if (direction_l0 != old_direction_l0) {
 
-        adc_audio_0 = (int) (history_r[ITD]*ILD);
+        if (direction_l0==0 || direction_l0==4){
+            ILD_l = 0.5 ;
+            ITD_l = 20 ;
+        }
+        else if (direction_l0==1 || direction_l0==3){
+            ILD_l = 0.7 ; // 45 degrees
+            ITD_l = 16 ; // 45 degrees
+        }
+        else if (direction_l0==2){
+            ILD_l = 1 ;
+            ITD_l = 0 ;
+        }
+        old_direction_l0 = direction_l0;
+    }
 
-        // Mask with DAC control bits
-        DAC_data_0 = (DAC_config_chan_B | (adc_audio_0 & 0xfff))  ;
+    if (direction_r0==3){
 
-        spi_write16_blocking(SPI_PORT, &(DAC_data_0), 1) ;
+        adc_audio_r0 = (int) (history_r[ITD_r]*ILD_r)/2;
+    }
+    else if (direction_r0==4){
+
+        adc_audio_r0 = (int) (history_r[ITD_r]*ILD_r)/6;
+    }
+    else if (direction_r0==0){
+
+        adc_audio_r0 = (int) (history_r[0]/6);
+    }
+    else { // direction 1,2
+
+        adc_audio_r0 = (int) (history_r[0]/2);
+    }
+    
+    if (direction_l0==3) {
+
+        adc_audio_l0 = (int) (history_l[ITD_l]*ILD_l)/2;
+
+    }
+    else if (direction_l0==4) {
+
+        adc_audio_l0 = (int) (history_l[ITD_l]*ILD_l)/6;
+
+    }
+    else if (direction_l0==0){
+
+        adc_audio_l0 = (int) (history_l[0])/6;
+        
     }
     else {
 
-        adc_audio_0 = (int) (history_r[0]);
-
-        // Mask with DAC control bits
-        DAC_data_0 = (DAC_config_chan_B | (adc_audio_0 & 0xfff))  ;
-
-        spi_write16_blocking(SPI_PORT, &DAC_data_0, 1) ;
+        adc_audio_l0 = (int) (history_l[0])/2;
+        
     }
+
+    DAC_data_0 = (DAC_config_chan_B | ( adc_audio_r0 + adc_audio_l0 & 0xfff))  ;
+    spi_write16_blocking(SPI_PORT, &DAC_data_0, 1) ;
 
     return true;
     
@@ -296,6 +385,7 @@ static PT_THREAD (protothread_core_1(struct pt *pt))
     // Indicate thread beginning
     PT_BEGIN(pt) ;
     while(1) {
+        PT_YIELD_usec(10000);
         // Wait for signal
         PT_SEM_SAFE_WAIT(pt, &core_1_go) ;
         // Turn off LED
@@ -308,7 +398,7 @@ static PT_THREAD (protothread_core_1(struct pt *pt))
         // printf("\n\n") ;
         // signal other core
         PT_SEM_SAFE_SIGNAL(pt, &core_0_go) ;
-        printf("Max amplitude left: %lf", fix2float15(max_amplitude_left));
+        // printf("Max amplitude left: %lf", fix2float15(max_amplitude_left));
     }
     // Indicate thread end
     PT_END(pt) ;
@@ -320,6 +410,7 @@ static PT_THREAD (protothread_core_0(struct pt *pt))
     // Indicate thread beginning
     PT_BEGIN(pt) ;
     while(1) {
+        PT_YIELD_usec(10000);
         // Wait for signal
         PT_SEM_SAFE_WAIT(pt, &core_0_go) ;
         // Turn on LED
@@ -333,31 +424,12 @@ static PT_THREAD (protothread_core_0(struct pt *pt))
         // signal other core
         PT_SEM_SAFE_SIGNAL(pt, &core_1_go) ;
 
-        // printf("old directions: %d, %d\n", old_direction_0, old_direction_1);
+        // printf("Right direction: %d, %d\n", direction_r0, direction_r1);
+        // printf("Left direction: %d, %d\n", direction_l0, direction_l1);
         // printf("state : %d, %d\n", STATE_0, STATE_1);
-        printf("Max amplitude right: %lf", fix2float15(max_amplitude_right));
+        // printf("Max amplitude right: %lf", fix2float15(max_amplitude_right));
     }
     // Indicate thread end
-    PT_END(pt) ;
-}
-
-// User input thread. User can change draw speed
-static PT_THREAD (protothread_serial(struct pt *pt))
-{
-    PT_BEGIN(pt) ;
-    static char classifier ;
-    static int test_in ;
-    static int old_test = 10;
-    static float float_in ;
-    while(1) {
-
-        sprintf(pt_serial_out_buffer, "input desired direction (0-5) : ");
-        serial_write ;
-        serial_read ;
-        sscanf(pt_serial_in_buffer,"%d", &test_in) ;
-        direction_0 = test_in ;
-        direction_1 = test_in ;
-    }
     PT_END(pt) ;
 }
 
@@ -367,25 +439,33 @@ static PT_THREAD (protothread_joystick(struct pt *pt))
     PT_BEGIN(pt) ;
 
     while(1) {
+        PT_YIELD_usec(40000);
         adc_select_input(1);
         uint adc_x_raw = adc_read();
 
         // printf("X raw: %lf", (float) adc_x_raw);
 
-        if(adc_x_raw <2000 && adc_x_raw >50) { // left
-            direction = 3;
+        // if(adc_x_raw <1500 && adc_x_raw >100) { // left
+        //     direction = 3;
+        // }
+        // else if(adc_x_raw <= 100){ // most left
+        //     direction = 4;
+        // }
+        // else if(adc_x_raw >=4000){ // most right
+        //     direction = 0;
+        // }
+        // else if(adc_x_raw >3000 && adc_x_raw <4000){ // right
+        //     direction = 1;
+        // }
+        // else { // front
+        //     direction = 2;
+        // }
+
+        if(adc_x_raw <1500) {
+            direction=4;
         }
-        else if(adc_x_raw <=50){ // most left
-            direction = 4;
-        }
-        else if(adc_x_raw >=4000){ // most right
-            direction = 0;
-        }
-        else if(adc_x_raw >2500 && adc_x_raw <4000){ // right
-            direction = 1;
-        }
-        else { // front
-            direction = 2;
+        else if (adc_x_raw >3000) {
+            direction=0;
         }
 
         for (int i =1; i<4; i++) {
@@ -393,11 +473,21 @@ static PT_THREAD (protothread_joystick(struct pt *pt))
         }
         joystick[0] = direction;
         if (joystick[0]==joystick[1] && joystick[1]==joystick[2] && joystick[2]==joystick[3]) {
-            direction_0 = direction;
-            direction_1 = direction;
+            if (direction==0 || direction==1) {
+                direction_r0 = 2;
+                direction_r1 = 2;
+                direction_l0 = 4;
+                direction_l1 = 4;
+            }
+            else if (direction==3 || direction==4) {
+                direction_r0 = 0;
+                direction_r1 = 0;
+                direction_l0 = 2;
+                direction_l1 = 2;
+            }
         }
         
-        printf("Direction_0/1: %i\n", direction_0);
+        // printf("Direction_0/1: %i\n", direction_0);
         
     }
     PT_END(pt) ;
@@ -418,7 +508,7 @@ void core1_entry() {
         repeating_timer_callback_core_1, NULL, &timer_core_1);
 
     // Add thread to core 1
-    pt_add_thread(protothread_core_1) ;
+    // pt_add_thread(protothread_core_1) ;
 
     // Start scheduler on core 1
     pt_schedule_start ;
@@ -482,7 +572,7 @@ int main() {
     PT_SEM_SAFE_INIT(&core_1_go, 0) ;
 
     // Desynchronize the beeps
-    // sleep_ms(fix2int15(ITD)*1000) ;
+    // sleep_ms(fix2int15(ITD_r)*1000) ;
     // Launch core 1
 
     multicore_launch_core1(core1_entry);
@@ -499,7 +589,7 @@ int main() {
         repeating_timer_callback_core_0, NULL, &timer_core_0);
 
     // Add core 0 threads
-    pt_add_thread(protothread_core_0) ;
+    // pt_add_thread(protothread_core_0) ;
 
     // add user interface
     // pt_add_thread(protothread_serial) ;
