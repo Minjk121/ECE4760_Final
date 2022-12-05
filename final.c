@@ -1,4 +1,4 @@
-/**
+/** REWRITE THIS
  *  V. Hunter Adams (vha3@cornell.edu)
  
     This is an experiment with the multicore capabilities on the
@@ -41,47 +41,6 @@ typedef signed int fix15 ;
 #define char2fix15(a) (fix15)(((fix15)(a)) << 15)
 #define divfix(a,b) (fix15)( (((signed long long)(a)) << 15) / (b))
 
-//Direct Digital Synthesis (DDS) parameters
-#define two32 4294967296.0  // 2^32 (a constant)
-#define Fs 200000            // sample rate
-
-// the DDS units - core 1
-// Phase accumulator and phase increment. Increment sets output frequency.
-volatile unsigned int phase_accum_main_1;                  
-volatile unsigned int phase_incr_main_1 = (2300.0*two32)/Fs ;
-
-// the DDS units - core 2
-// Phase accumulator and phase increment. Increment sets output frequency.
-volatile unsigned int phase_accum_main_0;
-volatile unsigned int phase_incr_main_0 = (2300.0*two32)/Fs ;
-
-// DDS sine table (populated in main())
-#define sine_table_size 256
-fix15 sin_table[sine_table_size] ;
-
-// Amplitude modulation parameters and variables
-fix15 global_max_amplitude = float2fix15(1.0) ;
-fix15 max_amplitude = float2fix15(1.0) ;    // maximum amplitude
-fix15 attack_inc ;                          // rate at which sound ramps up
-fix15 decay_inc ;                           // rate at which sound ramps down
-fix15 current_amplitude_0 = 0 ;             // current amplitude (modified in ISR)
-fix15 current_amplitude_1 = 0 ;             // current amplitude (modified in ISR)
-
-// Timing parameters for beeps (units of interrupts)
-#define ATTACK_TIME             200
-#define DECAY_TIME              200
-#define SUSTAIN_TIME            10000
-#define BEEP_DURATION           3000
-#define BEEP_REPEAT_INTERVAL    40000
-
-// State machine variables
-volatile unsigned int STATE_0 = 0 ;
-volatile unsigned int count_0 = 0 ;
-volatile unsigned int STATE_1 = 2 ;
-volatile unsigned int count_1 = 0 ;
-volatile unsigned int syl_num_0 = 0 ;
-volatile unsigned int syl_num_1 = 0 ;
-
 // SPI data
 uint16_t DAC_data_1 ; // output value
 uint16_t DAC_data_0 ; // output value
@@ -108,18 +67,12 @@ float new_l ;
 #define CORE_0   2
 #define CORE_1   3
 
-// Global counter for spinlock experimenting
-volatile int global_counter = 0 ;
-volatile int paused_0 = 0;
-volatile int paused_1 = 0;
 // Semaphore
 struct pt_sem core_1_go, core_0_go ;
 
 /* Final Project Variable */
 #define head_radius 9.0       // a
 #define speed_sound 34000.0   // c
-int angle_deg;              // user input
-fix15 angle_rad; 
 int direction_r0 = 1;
 int direction_r1 = 1;
 volatile int old_direction_r0 = 10;
@@ -132,24 +85,8 @@ volatile int old_direction_l1 = 10;
 
 float ILD_r;
 int ITD_r;
-
 float ILD_l;
 int ITD_l; 
-
-fix15 max_amplitude_right ;
-fix15 attack_inc_right ;
-fix15 decay_inc_right ;
-
-fix15 max_amplitude_left ;
-fix15 attack_inc_left ;
-fix15 decay_inc_left ;
-
-volatile int x_dist = 20 ;
-volatile int y_dist = 20 ;
-
-float intensity_diff;
-
-volatile int delay_counter ;
 
 // ADC Channel and pin
 #define ADC_CHAN_0 0
@@ -159,10 +96,6 @@ volatile int delay_counter ;
 #define ADC_PIN_26 26
 #define ADC_PIN_27 27
 
-// joystick pins
-#define JOYSTICK_VY 16
-#define JOYSTICK_VX 17
-
 // audio inputs
 int adc_audio_r0;
 int adc_audio_r1;
@@ -170,7 +103,7 @@ int adc_audio_l0;
 int adc_audio_l1;
 
 int joystick[4];
-int direction;
+int direction = 2;
 
 // This timer ISR is called on core 1 - LEFT
 bool repeating_timer_callback_core_1(struct repeating_timer *t) { 
@@ -184,25 +117,19 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
     }
     history_l[0] = new_l;
 
-    // adc_audio_1 = (int) (history_r[ITD_r]*ILD_r);
-
-    // DAC_data_1 = (DAC_config_chan_A | (adc_audio_1 & 0xfff))  ;
-    
-    // spi_write16_blocking(SPI_PORT, &(DAC_data_1), 1) ;   
-
     if (direction_r1 != old_direction_r1) {
 
         if (direction_r1==0 || direction_r1==4){
-            ILD_r = 0.5 ; // 80
-            ITD_r = 20 ; // 80
+            ILD_r = 0.5 ; // 80 degrees
+            ITD_r = 20 ; // 80 degrees
         }
         else if (direction_r1==1 || direction_r1==3){
-            ILD_r = 0.7 ; // 45
-            ITD_r = 16 ; // 45
+            ILD_r = 0.7 ; // 45 degrees
+            ITD_r = 16 ; // 45 degrees
         }
         else if (direction_r1==2){
-            ILD_r = 1 ;
-            ITD_r = 0 ;
+            ILD_r = 1 ; // 0 degrees
+            ITD_r = 0 ; // 0 degrees
         }
         old_direction_r1 = direction_r1;
     }
@@ -210,56 +137,44 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
     if (direction_l1 != old_direction_l1) {
 
         if (direction_l1==0 || direction_l1==4){
-            ILD_l = 0.5 ;
-            ITD_l = 20 ;
+            ILD_l = 0.5 ; // 80 degrees
+            ITD_l = 20 ; // 80 degrees
         }
         else if (direction_l1==1 || direction_l1==3){
-            ILD_l = 0.7 ; // 45
-            ITD_l = 16 ; // 45
+            ILD_l = 0.7 ; // 45 degrees
+            ITD_l = 16 ; // 45 degrees
         }
         else if (direction_l1==2){
-            ILD_l = 1 ;
-            ITD_l = 0 ;
+            ILD_l = 1 ; // 0 degrees
+            ITD_l = 0 ; // 0 degrees
         }
         old_direction_l1 = direction_l1;
     }
 
     if (direction_r1==1) {
-
         adc_audio_r1 = (int) (history_r[ITD_r]*ILD_r)/2;
     }
     else if (direction_r1==0) {
-
         adc_audio_r1 = (int) (history_r[ITD_r]*ILD_r)/6;
     }
     else if (direction_r1==4) {
-
         adc_audio_r1 = (int) (history_r[0])/6;
     }
-    else {
-
+    else { // direction 1,2
         adc_audio_r1 = (int) (history_r[0])/2;
     }
 
     if (direction_l1==1) {
-
         adc_audio_l1 = (int) (history_l[ITD_l]*ILD_l)/2;
-
     }
     else if (direction_l1==0) {
-
         adc_audio_l1 = (int) (history_l[ITD_l]*ILD_l)/6;
-
     }
     else if (direction_l1==4){
-
         adc_audio_l1 = (int) (history_l[0])/6;
-        
     }
-    else {
-
+    else { // direction 1,2
         adc_audio_l1 = (int) (history_l[0])/2;
-        
     }
 
     DAC_data_1 = (DAC_config_chan_A | ((adc_audio_r1 + adc_audio_l1) & 0xfff))  ;
@@ -280,39 +195,19 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
     }
     history_r[0] = new_r;
 
-    // adc_audio_0 = (int) (history_r[0]);
-
-    // DAC_data_0 = (DAC_config_chan_B | (adc_audio_0 & 0xfff))  ;
-
-    // spi_write16_blocking(SPI_PORT, &(DAC_data_0), 1) ;
-
-    // // FOR TWO SOUNDS TO ONE OUTPUT (need to scale values to under 3.3V)
-    // adc_select_input(0);
-    
-    // adc_audio_1 = (int) adc_read();
-    
-    // // Mask with DAC control bits
-    // DAC_data_1 = (DAC_config_chan_A | ((adc_audio_1 + adc_audio_0) & 0xfff))  ;
-
-    // // SPI write (no spinlock b/c of SPI buffer)
-    // spi_write16_blocking(SPI_PORT, &DAC_data_1, 1) ;
-
-    // SPI write (no spinlock b/c of SPI buffer)
-    // spi_write16_blocking(SPI_PORT, &DAC_data_0, 1) ;
-
     if (direction_r0 != old_direction_r0) {
 
         if (direction_r0==0 || direction_r0==4){
             ILD_r = 0.5 ; // 80 degrees
-            ITD_r = 20 ;
+            ITD_r = 20 ; // 80 degrees
         }
         else if (direction_r0==1 || direction_r0==3){
             ILD_r = 0.7 ; // 45 degrees
             ITD_r = 16 ; // 45 degrees
         }
         else if (direction_r0==2){
-            ILD_r = 1 ;
-            ITD_r = 0 ;
+            ILD_r = 1 ; // 0 degrees
+            ITD_r = 0 ; // 0 degrees
         }
         old_direction_r0 = direction_r0;
     }
@@ -320,56 +215,44 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
     if (direction_l0 != old_direction_l0) {
 
         if (direction_l0==0 || direction_l0==4){
-            ILD_l = 0.5 ;
-            ITD_l = 20 ;
+            ILD_l = 0.5 ; // 80 degrees
+            ITD_l = 20 ; // 80 degrees
         }
         else if (direction_l0==1 || direction_l0==3){
             ILD_l = 0.7 ; // 45 degrees
             ITD_l = 16 ; // 45 degrees
         }
         else if (direction_l0==2){
-            ILD_l = 1 ;
-            ITD_l = 0 ;
+            ILD_l = 1 ; // 0 degrees
+            ITD_l = 0 ; // 0 degrees
         }
         old_direction_l0 = direction_l0;
     }
 
     if (direction_r0==3){
-
         adc_audio_r0 = (int) (history_r[ITD_r]*ILD_r)/2;
     }
     else if (direction_r0==4){
-
         adc_audio_r0 = (int) (history_r[ITD_r]*ILD_r)/6;
     }
     else if (direction_r0==0){
-
         adc_audio_r0 = (int) (history_r[0]/6);
     }
     else { // direction 1,2
-
         adc_audio_r0 = (int) (history_r[0]/2);
     }
     
     if (direction_l0==3) {
-
         adc_audio_l0 = (int) (history_l[ITD_l]*ILD_l)/2;
-
     }
     else if (direction_l0==4) {
-
         adc_audio_l0 = (int) (history_l[ITD_l]*ILD_l)/6;
-
     }
     else if (direction_l0==0){
-
         adc_audio_l0 = (int) (history_l[0])/6;
-        
     }
-    else {
-
+    else { // direction 1,2
         adc_audio_l0 = (int) (history_l[0])/2;
-        
     }
 
     DAC_data_0 = (DAC_config_chan_B | ( adc_audio_r0 + adc_audio_l0 & 0xfff))  ;
@@ -377,60 +260,6 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
 
     return true;
     
-}
-
-// This thread runs on core 1
-static PT_THREAD (protothread_core_1(struct pt *pt))
-{
-    // Indicate thread beginning
-    PT_BEGIN(pt) ;
-    while(1) {
-        PT_YIELD_usec(10000);
-        // Wait for signal
-        PT_SEM_SAFE_WAIT(pt, &core_1_go) ;
-        // Turn off LED
-        gpio_put(LED, 0) ;
-        // Increment global counter variable
-        for (int i=0; i<10; i++) {
-            global_counter += 1 ;
-            sleep_ms(250) ;
-        }
-        // printf("\n\n") ;
-        // signal other core
-        PT_SEM_SAFE_SIGNAL(pt, &core_0_go) ;
-        // printf("Max amplitude left: %lf", fix2float15(max_amplitude_left));
-    }
-    // Indicate thread end
-    PT_END(pt) ;
-}
-
-// This thread runs on core 0 - RIGHT ear
-static PT_THREAD (protothread_core_0(struct pt *pt))
-{
-    // Indicate thread beginning
-    PT_BEGIN(pt) ;
-    while(1) {
-        PT_YIELD_usec(10000);
-        // Wait for signal
-        PT_SEM_SAFE_WAIT(pt, &core_0_go) ;
-        // Turn on LED
-        gpio_put(LED, 1) ;
-        // Increment global counter variable
-        for (int i=0; i<10; i++) {
-            global_counter += 1 ;
-            sleep_ms(250) ;
-        }
-        // printf("\n\n") ;
-        // signal other core
-        PT_SEM_SAFE_SIGNAL(pt, &core_1_go) ;
-
-        // printf("Right direction: %d, %d\n", direction_r0, direction_r1);
-        // printf("Left direction: %d, %d\n", direction_l0, direction_l1);
-        // printf("state : %d, %d\n", STATE_0, STATE_1);
-        // printf("Max amplitude right: %lf", fix2float15(max_amplitude_right));
-    }
-    // Indicate thread end
-    PT_END(pt) ;
 }
 
 // User joystick. User can change direction of sound
@@ -442,8 +271,6 @@ static PT_THREAD (protothread_joystick(struct pt *pt))
         PT_YIELD_usec(40000);
         adc_select_input(1);
         uint adc_x_raw = adc_read();
-
-        // printf("X raw: %lf", (float) adc_x_raw);
 
         // if(adc_x_raw <1500 && adc_x_raw >100) { // left
         //     direction = 3;
@@ -461,7 +288,7 @@ static PT_THREAD (protothread_joystick(struct pt *pt))
         //     direction = 2;
         // }
 
-        if(adc_x_raw <1500) {
+        if(adc_x_raw <1000) {
             direction=4;
         }
         else if (adc_x_raw >3000) {
@@ -486,8 +313,6 @@ static PT_THREAD (protothread_joystick(struct pt *pt))
                 direction_l1 = 2;
             }
         }
-        
-        // printf("Direction_0/1: %i\n", direction_0);
         
     }
     PT_END(pt) ;
@@ -556,25 +381,11 @@ int main() {
     adc_gpio_init(27);
     adc_gpio_init(28);
 
-    // set up increments for calculating bow envelope
-    attack_inc = divfix(max_amplitude, int2fix15(ATTACK_TIME)) ;
-    decay_inc =  divfix(max_amplitude, int2fix15(DECAY_TIME)) ;
-
-    // Build the sine lookup table
-    // scaled to produce values between 0 and 4096 (for 12-bit DAC)
-    int ii;
-    for (ii = 0; ii < sine_table_size; ii++){
-         sin_table[ii] = float2fix15(2047*sin((float)ii*6.283/(float)sine_table_size));
-    }
-
     // Initialize the intercore semaphores
     PT_SEM_SAFE_INIT(&core_0_go, 1) ;
     PT_SEM_SAFE_INIT(&core_1_go, 0) ;
 
-    // Desynchronize the beeps
-    // sleep_ms(fix2int15(ITD_r)*1000) ;
     // Launch core 1
-
     multicore_launch_core1(core1_entry);
 
     // Create a repeating timer that calls 
@@ -590,9 +401,6 @@ int main() {
 
     // Add core 0 threads
     // pt_add_thread(protothread_core_0) ;
-
-    // add user interface
-    // pt_add_thread(protothread_serial) ;
 
     // add joystick interface
     pt_add_thread(protothread_joystick) ;
