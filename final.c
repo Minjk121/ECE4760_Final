@@ -155,10 +155,10 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
         adc_audio_r1 = (int) (history_r[ITD_r]*ILD_r)/2;
     }
     else if (direction_r1==0) {
-        adc_audio_r1 = (int) (history_r[ITD_r]*ILD_r)/6;
+        adc_audio_r1 = (int) (history_r[ITD_r]*ILD_r)/10;
     }
     else if (direction_r1==4) {
-        adc_audio_r1 = (int) (history_r[0])/6;
+        adc_audio_r1 = (int) (history_r[0])/10;
     }
     else { // direction 1,2
         adc_audio_r1 = (int) (history_r[0])/2;
@@ -168,10 +168,10 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
         adc_audio_l1 = (int) (history_l[ITD_l]*ILD_l)/2;
     }
     else if (direction_l1==0) {
-        adc_audio_l1 = (int) (history_l[ITD_l]*ILD_l)/6;
+        adc_audio_l1 = (int) (history_l[ITD_l]*ILD_l)/10;
     }
     else if (direction_l1==4){
-        adc_audio_l1 = (int) (history_l[0])/6;
+        adc_audio_l1 = (int) (history_l[0])/10;
     }
     else { // direction 1,2
         adc_audio_l1 = (int) (history_l[0])/2;
@@ -233,10 +233,10 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
         adc_audio_r0 = (int) (history_r[ITD_r]*ILD_r)/2;
     }
     else if (direction_r0==4){
-        adc_audio_r0 = (int) (history_r[ITD_r]*ILD_r)/6;
+        adc_audio_r0 = (int) (history_r[ITD_r]*ILD_r)/10;
     }
     else if (direction_r0==0){
-        adc_audio_r0 = (int) (history_r[0]/6);
+        adc_audio_r0 = (int) (history_r[0]/10);
     }
     else { // direction 1,2
         adc_audio_r0 = (int) (history_r[0]/2);
@@ -246,10 +246,10 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
         adc_audio_l0 = (int) (history_l[ITD_l]*ILD_l)/2;
     }
     else if (direction_l0==4) {
-        adc_audio_l0 = (int) (history_l[ITD_l]*ILD_l)/6;
+        adc_audio_l0 = (int) (history_l[ITD_l]*ILD_l)/10;
     }
     else if (direction_l0==0){
-        adc_audio_l0 = (int) (history_l[0])/6;
+        adc_audio_l0 = (int) (history_l[0])/10;
     }
     else { // direction 1,2
         adc_audio_l0 = (int) (history_l[0])/2;
