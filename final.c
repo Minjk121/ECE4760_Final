@@ -36,6 +36,7 @@ typedef signed int fix15 ;
 uint16_t DAC_data_1 ; // output value
 uint16_t DAC_data_0 ; // output value
 
+// Audio History
 float history_r[21] ;
 float history_l[21] ;
 float new_r ;
@@ -61,19 +62,23 @@ float new_l ;
 // Semaphore
 struct pt_sem core_1_go, core_0_go ;
 
-/* Final Project Variable */
+// Constants
 #define head_radius 9.0       // a
 #define speed_sound 34000.0   // c
+
+// Direction Variables
 int direction_r0 = 1;
 int direction_r1 = 1;
-volatile int old_direction_r0 = 10;
-volatile int old_direction_r1 = 10;
-
 int direction_l0 = 3;
 int direction_l1 = 3;
+
+// Direction History Variables
+volatile int old_direction_r0 = 10;
+volatile int old_direction_r1 = 10;
 volatile int old_direction_l0 = 10;
 volatile int old_direction_l1 = 10;
 
+// Algorithm Variables
 float ILD_r;
 int ITD_r;
 float ILD_l;
@@ -93,23 +98,29 @@ int adc_audio_r1;
 int adc_audio_l0;
 int adc_audio_l1;
 
+// Joystick Variables
 int joystick[4];
 int direction = 2;
 
-// This timer ISR is called on core 1 - LEFT
+//========================================================================
+// Timer ISR on Core 1 - LEFT
+//========================================================================
+// Applies algorithm variables based on the joystick input direction.
+
 bool repeating_timer_callback_core_1(struct repeating_timer *t) { 
 
-    // second input
+    // ADC input for left audio
     adc_select_input(0);
-
+    
+    // Update history data
     new_l = adc_read();
     for (int i =1; i<=20; i++) {
         history_l[i] = history_l[i-1];
     }
     history_l[0] = new_l;
 
+    // Update ILD and ITD based on input data (right)
     if (direction_r1 != old_direction_r1) {
-
         if (direction_r1==0 || direction_r1==4){
             ILD_r = 0.5 ; // 80 degrees
             ITD_r = 20 ; // 80 degrees
@@ -125,8 +136,8 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
         old_direction_r1 = direction_r1;
     }
 
+    // Update ILD and ITD based on input data (left)
     if (direction_l1 != old_direction_l1) {
-
         if (direction_l1==0 || direction_l1==4){
             ILD_l = 0.5 ; // 80 degrees
             ITD_l = 20 ; // 80 degrees
@@ -142,6 +153,7 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
         old_direction_l1 = direction_l1;
     }
 
+   // Update amplitude in audio (right)
     if (direction_r1==1) {
         adc_audio_r1 = (int) (history_r[ITD_r]*ILD_r)/2;
     }
@@ -155,6 +167,7 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
         adc_audio_r1 = (int) (history_r[0])/2;
     }
 
+    // Update amplitude in audio (left)
     if (direction_l1==1) {
         adc_audio_l1 = (int) (history_l[ITD_l]*ILD_l)/2;
     }
@@ -164,10 +177,11 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
     else if (direction_l1==4){
         adc_audio_l1 = (int) (history_l[0])/10;
     }
-    else { // direction 1,2
+    else {
         adc_audio_l1 = (int) (history_l[0])/2;
     }
 
+    // Update 12-bit DAC with last 12 bits in ADC 
     DAC_data_1 = (DAC_config_chan_A | ((adc_audio_r1 + adc_audio_l1) & 0xfff))  ;
     spi_write16_blocking(SPI_PORT, &DAC_data_1, 1) ;
 
@@ -175,19 +189,25 @@ bool repeating_timer_callback_core_1(struct repeating_timer *t) {
     
 }
 
-// This timer ISR is called on core 0 - RIGHT
+//========================================================================
+// Timer ISR on Core 0 - RIGHT
+//========================================================================
+// Applies algorithm variables based on the joystick input direction.
+
 bool repeating_timer_callback_core_0(struct repeating_timer *t) {
 
+    // ADC input for right audio
     adc_select_input(2);
 
+    // Update history data
     new_r = adc_read();
     for (int i =1; i<=20; i++) {
         history_r[i] = history_r[i-1];
     }
     history_r[0] = new_r;
 
+    // Update ILD and ITD based on input data (right)
     if (direction_r0 != old_direction_r0) {
-
         if (direction_r0==0 || direction_r0==4){
             ILD_r = 0.5 ; // 80 degrees
             ITD_r = 20 ; // 80 degrees
@@ -202,9 +222,9 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
         }
         old_direction_r0 = direction_r0;
     }
-
+    
+    // Update ILD and ITD based on input data (left)
     if (direction_l0 != old_direction_l0) {
-
         if (direction_l0==0 || direction_l0==4){
             ILD_l = 0.5 ; // 80 degrees
             ITD_l = 20 ; // 80 degrees
@@ -219,7 +239,8 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
         }
         old_direction_l0 = direction_l0;
     }
-
+    
+    // Update amplitude in audio (right)
     if (direction_r0==3){
         adc_audio_r0 = (int) (history_r[ITD_r]*ILD_r)/2;
     }
@@ -229,10 +250,11 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
     else if (direction_r0==0){
         adc_audio_r0 = (int) (history_r[0]/10);
     }
-    else { // direction 1,2
+    else { 
         adc_audio_r0 = (int) (history_r[0]/2);
     }
-    
+
+    // Update amplitude in audio (left)
     if (direction_l0==3) {
         adc_audio_l0 = (int) (history_l[ITD_l]*ILD_l)/2;
     }
@@ -246,6 +268,7 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
         adc_audio_l0 = (int) (history_l[0])/2;
     }
 
+    // Update 12-bit DAC with last 12 bits in ADC 
     DAC_data_0 = (DAC_config_chan_B | ( adc_audio_r0 + adc_audio_l0 & 0xfff))  ;
     spi_write16_blocking(SPI_PORT, &DAC_data_0, 1) ;
 
@@ -253,42 +276,32 @@ bool repeating_timer_callback_core_0(struct repeating_timer *t) {
     
 }
 
-// User joystick. User can change direction of sound
+//========================================================================
+// PT_Thread_Joystick
+//========================================================================
+// Joystick user input to ADC
+
 static PT_THREAD (protothread_joystick(struct pt *pt))
 {
     PT_BEGIN(pt) ;
 
     while(1) {
-        PT_YIELD_usec(40000);
+        PT_YIELD_usec(40000); // 40000 microseconds
         adc_select_input(1);
         uint adc_x_raw = adc_read();
-
-        // if(adc_x_raw <1500 && adc_x_raw >100) { // left
-        //     direction = 3;
-        // }
-        // else if(adc_x_raw <= 100){ // most left
-        //     direction = 4;
-        // }
-        // else if(adc_x_raw >=4000){ // most right
-        //     direction = 0;
-        // }
-        // else if(adc_x_raw >3000 && adc_x_raw <4000){ // right
-        //     direction = 1;
-        // }
-        // else { // front
-        //     direction = 2;
-        // }
-
-        if(adc_x_raw <1000) {
+        
+        // Updates direction based on the raw data
+        if(adc_x_raw < 1000) {
             direction=4;
         }
-        else if (adc_x_raw >3000) {
+        else if (adc_x_raw > 3000) {
             direction=0;
         }
 
         for (int i =1; i<4; i++) {
             joystick[i] = joystick[i-1];
         }
+        
         joystick[0] = direction;
         if (joystick[0]==joystick[1] && joystick[1]==joystick[2] && joystick[2]==joystick[3]) {
             if (direction==0 || direction==1) {
@@ -309,9 +322,12 @@ static PT_THREAD (protothread_joystick(struct pt *pt))
     PT_END(pt) ;
 }
 
-// This is the core 1 entry point - LEFT ear
+//========================================================================
+// Core 1 Entry Point - Left Ear
+//========================================================================
+
 void core1_entry() {
-    // create an alarm pool on core 1
+    // Create an alarm pool on core 1
     alarm_pool_t *core1pool ;
     core1pool = alarm_pool_create(2, 16) ;
 
@@ -323,16 +339,15 @@ void core1_entry() {
     alarm_pool_add_repeating_timer_us(core1pool, -25, 
         repeating_timer_callback_core_1, NULL, &timer_core_1);
 
-    // Add thread to core 1
-    // pt_add_thread(protothread_core_1) ;
-
     // Start scheduler on core 1
     pt_schedule_start ;
 
 }
 
 
-// Core 0 entry point
+//========================================================================
+// Core 0 Entry Point - Right Ear
+//========================================================================
 int main() {
     // Initialize stdio/uart (printf won't work unless you do this!)
     stdio_init_all();
@@ -361,12 +376,14 @@ int main() {
     gpio_set_dir(LED, GPIO_OUT) ;
     gpio_put(LED, 0) ;
 
+    // Intialize Cores
     gpio_init(CORE_0) ;
     gpio_init(CORE_1) ;
 
     // ADC INIT FOR JOYSTICK
     stdio_init_all();
     adc_init();
+    
     // Make sure GPIO is high-impedance, no pullups etc
     adc_gpio_init(26);
     adc_gpio_init(27);
@@ -379,9 +396,6 @@ int main() {
     // Launch core 1
     multicore_launch_core1(core1_entry);
 
-    // Create a repeating timer that calls 
-    // repeating_timer_callback (defaults core 0)
-
     struct repeating_timer timer_core_0;
 
     // Negative delay so means we will call repeating_timer_callback, and call it
@@ -389,9 +403,6 @@ int main() {
    
     add_repeating_timer_us(-25, 
         repeating_timer_callback_core_0, NULL, &timer_core_0);
-
-    // Add core 0 threads
-    // pt_add_thread(protothread_core_0) ;
 
     // add joystick interface
     pt_add_thread(protothread_joystick) ;
