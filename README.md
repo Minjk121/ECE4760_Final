@@ -7,5 +7,7 @@ Demo video can be found [here](https://youtu.be/p_wtaCNrdgE)
 
 ### Reference
 [ECE4760 Course](https://ece4760.github.io)
+
 [Joystick](https://www.tomshardware.com/how-to/raspberry-pi-pico-joystick)
+
 [Past project](https://people.ece.cornell.edu/land/courses/ece4760/FinalProjects/f2021/az292_lh479_kw456/az292_lh479_kw456/index.html#Intro)
