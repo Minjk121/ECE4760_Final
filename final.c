@@ -1,20 +1,11 @@
-/** REWRITE THIS
- *  V. Hunter Adams (vha3@cornell.edu)
- 
-    This is an experiment with the multicore capabilities on the
-    RP2040. The program instantiates a timer interrupt on each core.
-    Each of these timer interrupts writes to a separate channel
-    of the SPI DAC and does DDS of two sine waves of two different
-    frequencies. These sine waves are amplitude-modulated to "beeps."
-    No spinlock is required to mediate the SPI writes because of the
-    SPI buffer on the RP2040. Spinlocks are used in the main program
-    running on each core to lock the other out from an incrementing
-    global variable. These are "under the hood" of the PT_SEM_SAFE_x
-    macros. Two threads ping-pong using these semaphores.
-    Note that globals are visible from both cores. Note also that GPIO
-    pin mappings performed on core 0 can be utilized from core 1.
-    Creation of an alarm pool is required to force a timer interrupt to
-    take place on core 1 rather than core 0.
+/*
+Minjung Kwon, Ann Xu, Amy Wang
+Spacial Audio Project
+
+This project implements spatial audio into a fun and interactive murder mystery game. 
+We generated self-recorded audio and passed it to headphones while applying a spatial audio algorithm to the input audio. 
+To the headphone user, the audio appears to be coming from the specific direction the user chooses with the joystick. 
+The goal is to closely mimic how sounds in real life reach our ears, depending on where the sound is coming from.
  */
 
 // Include necessary libraries
